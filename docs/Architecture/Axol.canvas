@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "id": "grp",
+      "type": "group",
+      "label": "Self-Adapting Harness",
+      "x": -420,
+      "y": -380,
+      "width": 1180,
+      "height": 620
+    },
+    {
+      "id": "harness",
+      "type": "file",
+      "file": "Architecture/Harness.md",
+      "x": -60,
+      "y": -340,
+      "width": 300,
+      "height": 200,
+      "color": "4"
+    },
+    {
+      "id": "tools",
+      "type": "file",
+      "file": "Architecture/Tools.md",
+      "x": -380,
+      "y": -60,
+      "width": 300,
+      "height": 200
+    },
+    {
+      "id": "memory",
+      "type": "file",
+      "file": "Architecture/Memory.md",
+      "x": -60,
+      "y": -60,
+      "width": 300,
+      "height": 200
+    },
+    {
+      "id": "eval",
+      "type": "file",
+      "file": "Architecture/Evaluation.md",
+      "x": 260,
+      "y": -60,
+      "width": 300,
+      "height": 200
+    },
+    {
+      "id": "adapt",
+      "type": "file",
+      "file": "Architecture/Adaptation Loop.md",
+      "x": 420,
+      "y": -340,
+      "width": 300,
+      "height": 200,
+      "color": "6"
+    },
+    {
+      "id": "mil",
+      "type": "file",
+      "file": "Architecture/Model Interface Layer.md",
+      "x": -60,
+      "y": 320,
+      "width": 300,
+      "height": 200,
+      "color": "5"
+    },
+    {
+      "id": "local",
+      "type": "text",
+      "text": "## Local models\nllama.cpp, vLLM, Ollama\u2026",
+      "x": -280,
+      "y": 620,
+      "width": 260,
+      "height": 120
+    },
+    {
+      "id": "api",
+      "type": "text",
+      "text": "## API models\nhosted providers",
+      "x": 120,
+      "y": 620,
+      "width": 260,
+      "height": 120
+    },
+    {
+      "id": "overview",
+      "type": "file",
+      "file": "Architecture/Overview.md",
+      "x": -900,
+      "y": -380,
+      "width": 400,
+      "height": 500,
+      "color": "3"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "harness",
+      "toNode": "tools",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "e2",
+      "fromNode": "harness",
+      "toNode": "memory",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "e3",
+      "fromNode": "harness",
+      "toNode": "eval",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "trace"
+    },
+    {
+      "id": "e4",
+      "fromNode": "eval",
+      "toNode": "adapt",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "label": "signals"
+    },
+    {
+      "id": "e5",
+      "fromNode": "adapt",
+      "toNode": "harness",
+      "fromSide": "left",
+      "toSide": "right",
+      "label": "profile"
+    },
+    {
+      "id": "e6",
+      "fromNode": "memory",
+      "toNode": "mil",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "e6b",
+      "fromNode": "harness",
+      "toNode": "mil",
+      "fromSide": "left",
+      "toSide": "left",
+      "label": "prompts"
+    },
+    {
+      "id": "e7",
+      "fromNode": "mil",
+      "toNode": "local",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "e8",
+      "fromNode": "mil",
+      "toNode": "api",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ]
+}

@@ -67,6 +67,8 @@ Setup and usage instructions will be added once the first working version lands.
 
 ## Contributing
 
+Design notes, architecture diagrams and decision records live in [`docs/`](docs/Home.md), which is an [Obsidian](https://obsidian.md) vault. Open `docs/` as a vault, or read it on GitHub. See [docs/Contributing.md](docs/Contributing.md).
+
 Axol is in its early stages. Ideas, feedback and discussion are welcome: open an issue to get involved.
 
 ## License

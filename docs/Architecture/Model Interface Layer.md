@@ -28,7 +28,7 @@ classDiagram
 
 ## Depends on / used by
 - Depends on: model providers / local runtimes
-- Used by: [Harness](Harness.md)
+- Used by: [Harness](Harness.md); new models from the [Model Forge](Model%20Forge.md) register here
 
 ## Related decisions
 -

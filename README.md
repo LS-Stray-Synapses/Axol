@@ -1,4 +1,4 @@
-# Axol - Stefanos & Lenos
+# Axol
 
 **A self-adapting agent architecture with its own harness.**
 

@@ -1,0 +1,9 @@
+{
+  "colorGroups": [
+    { "query": "path:Architecture", "color": { "a": 1, "rgb": 5431378 } },
+    { "query": "path:Decisions", "color": { "a": 1, "rgb": 14701138 } },
+    { "query": "path:Research", "color": { "a": 1, "rgb": 11621088 } },
+    { "query": "path:Meetings", "color": { "a": 1, "rgb": 8421504 } }
+  ],
+  "search": "-path:Templates"
+}

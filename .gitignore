@@ -1,0 +1,6 @@
+# Obsidian personal state (shared settings in docs/.obsidian are committed)
+docs/.obsidian/workspace.json
+docs/.obsidian/workspace-mobile.json
+docs/.obsidian/cache
+docs/.trash/
+.DS_Store

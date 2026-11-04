@@ -6,7 +6,7 @@ tags: [component]
 # Adaptation Loop
 
 ## Purpose
-Watches how the current model behaves (via [Evaluation](Evaluation.md) signals) and adjusts the harness: prompt format, tool-use style, context handling and control flow, so Axol does not depend on hand-tuning per model.
+Part of the [Harness Forge](Harness%20Forge.md). Watches how the current model behaves (via [Experience Store](Experience%20Store.md) signals and [Evaluation](Evaluation.md) scores) and adjusts the harness composition: prompt format, tool-use style, context handling and control flow, so Axol does not depend on hand-tuning per model.
 
 ## Interface
 ```python
@@ -23,8 +23,8 @@ flowchart LR
 ```
 
 ## Depends on / used by
-- Depends on: [Evaluation](Evaluation.md)
-- Used by: [Harness](Harness.md)
+- Depends on: [Experience Store](Experience%20Store.md), [Evaluation](Evaluation.md)
+- Used by: [Harness Forge](Harness%20Forge.md)
 
 ## Related decisions
 -

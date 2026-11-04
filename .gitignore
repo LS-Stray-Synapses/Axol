@@ -4,3 +4,9 @@ docs/.obsidian/workspace-mobile.json
 docs/.obsidian/cache
 docs/.trash/
 .DS_Store
+
+# Obsidian plugin code: install via Settings → Community plugins.
+# Plugin list (community-plugins.json) and settings (data.json, manifest.json) are committed.
+docs/.obsidian/plugins/*/main.js
+docs/.obsidian/plugins/*/styles.css
+docs/.obsidian/plugins/obsidian-git/

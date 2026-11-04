@@ -22,4 +22,5 @@
 ## Git workflow
 - Notes go through the same branches/PRs as code. A design change PR should touch both the code and the relevant note/ADR.
 - `.obsidian/workspace*.json` is gitignored (personal UI state). Shared settings in `.obsidian/` are committed.
+- **Plugins:** the list of vault plugins (`.obsidian/community-plugins.json`) and their settings (`data.json`) are committed, but the plugin code (`main.js`, `styles.css`) is not. After cloning, install the plugins from *Settings → Community plugins → Browse*; the shared settings apply automatically. Obsidian Git is a personal tool and stays out of the repo.
 - Discussion of a note → GitHub PR review comments or an issue linking the note.

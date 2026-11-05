@@ -1,0 +1,13 @@
+[project]
+name = "axol"
+version = "0.0.1"
+description = "A self-adapting agent architecture with its own harness."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+# Loose ranges here; exact pins live in requirements.txt.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "websockets>=13",
+]

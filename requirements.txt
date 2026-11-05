@@ -1,0 +1,8 @@
+# Python dependencies, pinned so both of us run the exact same versions.
+# Install:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# Add a dependency: add it to pyproject.toml AND pin it here, in the same commit.
+
+# Server: WebSocket + static files for the web UI (mock_server.py, later the real harness server)
+fastapi==0.162.0
+uvicorn==0.54.0
+websockets==17.4   # uvicorn needs this to speak WebSocket

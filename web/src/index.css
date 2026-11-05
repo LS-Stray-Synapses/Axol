@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Theme tokens. Plain CSS variables (--h-*) are the real source: plugins use
+   them via harness.theme, and the approval dialog's shadow DOM inherits them.
+   The @theme block below just maps them onto Tailwind utility names, so
+   `bg-panel` or `text-muted` work in our own components. */
+:root {
+  --h-bg: #0d1016;
+  --h-panel: #141922;
+  --h-raised: #1c2330;
+  --h-border: #2a3343;
+  --h-fg: #e3e8f0;
+  --h-muted: #8b96a8;
+  --h-accent: #6ea8ff;
+  --h-danger: #f47272;
+  --h-ok: #5fd08f;
+  --h-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --h-mono: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, monospace;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --h-bg: #f6f7f9;
+  --h-panel: #ffffff;
+  --h-raised: #eef1f5;
+  --h-border: #d5dbe4;
+  --h-fg: #1a2030;
+  --h-muted: #5e6a7d;
+  --h-accent: #2563eb;
+  --h-danger: #c83232;
+  --h-ok: #18864b;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--h-bg);
+  --color-panel: var(--h-panel);
+  --color-raised: var(--h-raised);
+  --color-border: var(--h-border);
+  --color-fg: var(--h-fg);
+  --color-muted: var(--h-muted);
+  --color-accent: var(--h-accent);
+  --color-danger: var(--h-danger);
+  --color-ok: var(--h-ok);
+  --font-sans: var(--h-font);
+  --font-mono: var(--h-mono);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--h-bg);
+  color: var(--h-fg);
+  font-family: var(--h-font);
+}
+
+/* Markdown output. Kept as plain CSS: react-markdown emits bare tags, and
+   styling them here is simpler than mapping each one to a component. */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md table, .md blockquote { margin: 0.6em 0; }
+.md h1, .md h2, .md h3, .md h4 { margin: 1em 0 0.4em; font-weight: 600; line-height: 1.25; }
+.md h1 { font-size: 1.4em; }
+.md h2 { font-size: 1.2em; }
+.md h3 { font-size: 1.05em; }
+.md ul { list-style: disc; padding-left: 1.4em; }
+.md ol { list-style: decimal; padding-left: 1.4em; }
+.md li { margin: 0.15em 0; }
+.md a { color: var(--h-accent); text-decoration: underline; }
+.md blockquote { border-left: 3px solid var(--h-border); padding-left: 0.8em; color: var(--h-muted); }
+.md code { font-family: var(--h-mono); font-size: 0.9em; }
+.md :not(pre) > code { background: var(--h-raised); padding: 0.1em 0.35em; border-radius: 4px; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--h-border); padding: 0.3em 0.7em; text-align: left; }
+.md th { background: var(--h-raised); }
+.md hr { border: 0; border-top: 1px solid var(--h-border); margin: 1em 0; }
+
+@keyframes h-spin { to { transform: rotate(360deg); } }
+.h-spinner {
+  width: 0.85em;
+  height: 0.85em;
+  border: 2px solid var(--h-border);
+  border-top-color: var(--h-accent);
+  border-radius: 50%;
+  animation: h-spin 0.8s linear infinite;
+  display: inline-block;
+}

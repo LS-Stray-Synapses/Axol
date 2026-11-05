@@ -10,3 +10,18 @@ docs/.trash/
 docs/.obsidian/plugins/*/main.js
 docs/.obsidian/plugins/*/styles.css
 docs/.obsidian/plugins/obsidian-git/
+
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info/
+.venv/
+
+# Web (also covered by web/.gitignore)
+node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+
+# Local secrets (API keys go here, never in code)
+.env

@@ -63,7 +63,42 @@ Axol was inspired by the harness design behind **DeepSeek**.
 
 ## Getting started
 
-Setup and usage instructions will be added once the first working version lands.
+The web UI is built. It runs against a **mock back end** while we build the real harness step by step.
+To see how the two sides talk, read [docs/Architecture/Front end.md](docs/Architecture/Front%20end.md).
+
+**Prerequisites:** Python ≥ 3.11 and Node.js ≥ 22 (`node -v`).
+
+```bash
+git clone https://github.com/LS-Stray-Synapses/Axol.git && cd Axol
+
+# Python env
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# Web UI deps (exact versions from package-lock.json)
+cd web && npm ci && cd ..
+```
+
+**Run it** (two terminals, both from the repo root):
+
+```bash
+.venv/bin/uvicorn mock_server:app --port 8000 --reload   # fake harness
+cd web && npm run dev                                     # UI → http://localhost:5173
+```
+
+Type `/scenario tools` (or `approval`, `error`, `cancel`, …) in the chat to play a scripted scenario.
+
+**Checks** (from `web/`): `npm run typecheck`, `npm test` (unit), `npm run e2e` (end-to-end; first time: `npx playwright install chromium`).
+
+### Repo layout
+
+```
+web/              React + TypeScript UI   (web/src/contract.ts = the event contract)
+plugins/          UI plugins the server can load at runtime (plain JS, no build)
+mock_server.py    fake back end with scripted scenarios
+docs/             design notes (Obsidian vault)
+requirements.txt  pinned Python deps     pyproject.toml: project metadata
+```
 
 ## Contributing
 

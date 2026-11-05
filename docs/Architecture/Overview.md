@@ -92,6 +92,7 @@ sequenceDiagram
 | Self-adaptation | [Adaptation Loop](Adaptation%20Loop.md) | draft |
 | Evaluation & benchmarks | [Evaluation](Evaluation.md) | draft |
 | Experience recording | [Experience Store](Experience%20Store.md) | draft |
+| Web UI & its protocol | [Front end](Front%20end.md) | draft |
 | Model creation / fine-tuning | [Model Forge](Model%20Forge.md) | later |
 
 Visual map: [Axol.canvas](Axol.canvas) (open in Obsidian).

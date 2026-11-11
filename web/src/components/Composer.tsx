@@ -7,10 +7,10 @@ export function Composer() {
   const running = useStore((s) => s.running);
   const connected = useStore((s) => s.connection === "open");
   const [text, setText] = useState("");
+  const [selectedModel, setSelectedModel] = useState("local");
   const box = useRef<HTMLTextAreaElement>(null);
   const disabled = running || !connected;
 
-  // Grow with the content up to a cap, then scroll.
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -18,17 +18,15 @@ export function Composer() {
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, [text]);
 
-  // Give focus back when a turn ends, so the next message can be typed right away.
   useEffect(() => {
     if (!disabled) box.current?.focus();
   }, [disabled]);
 
   function send() {
-    if (submitUserMessage(text)) setText("");
+    if (submitUserMessage(text, selectedModel)) setText("");
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    // isComposing: Enter that confirms an IME candidate (Chinese, Japanese…) isn't "send".
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       send();
@@ -39,6 +37,17 @@ export function Composer() {
     <div className="border-t border-border bg-panel px-4 py-3">
       <div className="mx-auto flex max-w-3xl items-end gap-2">
         <Slot name="composer.actions" max={2} menuPlacement="up" className="flex items-center gap-1 pb-1.5" />
+
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          className="h-10 rounded-md border border-border bg-bg px-2 text-sm"
+          aria-label="Model"
+        >
+          <option value="local">local (qwen3.5:4b)</option>
+          <option value="local-small">local-small (qwen3.5:2b)</option>
+        </select>
+
         <textarea
           ref={box}
           data-composer
@@ -47,9 +56,16 @@ export function Composer() {
           disabled={disabled}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={!connected ? "Not connected…" : running ? "Agent is working…" : "Message (Enter to send, Shift+Enter for newline)"}
+          placeholder={
+            !connected
+              ? "Not connected…"
+              : running
+                ? "Agent is working…"
+                : "Message (Enter to send, Shift+Enter for newline)"
+          }
           className="min-h-[2.5rem] flex-1 resize-none rounded-md border border-border bg-bg px-3 py-2 outline-none focus:border-accent disabled:opacity-60"
         />
+
         {running ? (
           <button
             type="button"

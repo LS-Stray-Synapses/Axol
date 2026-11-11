@@ -42,13 +42,26 @@ export function startConnection(): void {
 }
 
 /** What the composer (and harnessDebug.runScenario) calls. */
-export function submitUserMessage(text: string): boolean {
+export function submitUserMessage(text: string, model: string = "local"): boolean {
   const trimmed = text.trim();
   if (!trimmed || useStore.getState().running) return false;
-  if (!sendMessage(trimmed)) return false;
+
+  const payload: {
+    type: "user_message";
+    text: string;
+    model: string;
+  } = {
+    type: "user_message",
+    text: trimmed,
+    model,
+  };
+
+  if (!sendMessage(payload)) return false;
+
   addUserMessage(trimmed);
   return true;
 }
+
 
 export function stopTurn(): void {
   markCancelRequested();

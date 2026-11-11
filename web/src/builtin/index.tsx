@@ -8,6 +8,7 @@ import { register } from "../slots";
 import { MemoryTab } from "./MemoryTab";
 import { PluginsTab } from "./PluginsTab";
 import { ToolsTab } from "./ToolsTab";
+import { WorkspaceTab } from "./WorkspaceTab";
 
 function ThemeToggle() {
   const [light, setLight] = useState(() => document.documentElement.dataset.theme === "light");
@@ -26,6 +27,7 @@ function ThemeToggle() {
 
 export function registerBuiltins(): Undo {
   const undos = [
+    register("sidebar.tabs", { id: "workspace", title: "Workspace", order: 25, render: WorkspaceTab }),
     register("sidebar.tabs", { id: "memory", title: "Memory", order: 10, render: MemoryTab }),
     register("sidebar.tabs", { id: "tools", title: "Tools", order: 20, render: ToolsTab }),
     register("sidebar.tabs", { id: "plugins", title: "Plugins", order: 30, render: PluginsTab }),

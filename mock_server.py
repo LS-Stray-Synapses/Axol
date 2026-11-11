@@ -18,11 +18,83 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
+from modules import LocalTools, MCPTools, ModelConfig, Agent
+import os
+import asyncio
+from contextlib import AsyncExitStack
+
 ROOT = Path(__file__).parent
+WORKSPACE = ROOT / "workspace"
+MEMORY_FILE = ROOT / "memory.md"
+MCP_CONFIG = ROOT / "mcp_server.json"
 PLUGINS_DIR = ROOT / "plugins"
 DIST_DIR = ROOT / "web" / "dist"
 
+MODELS: dict[str, ModelConfig] = {
+    "local": ModelConfig(
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",
+        model="qwen3.5:4b"
+    ),
+    "local-small": ModelConfig(
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",
+        model="qwen3.5:2b"
+    )   
+}
+
+SYSTEM_PROMPT = """You are a helpful personal assistant running inside a \
+custom harness. Be concise.
+
+The user's workspace folder holds their personal files: notes, todo lists, \
+ideas. You have tools to list, read and write those files. Never claim you \
+lack access to user's files or tasks - use your tools to look.
+
+Here is what you remember about the user from previous sessions:
+{memory}
+
+Memory management:
+- When you learn a new, potentially useful and lasting fact about the user, \
+check the existing memory above first.
+- Save the fact using save_memory only if it is not already present.
+- Do not save duplicate or redundant information.
+- If a new fact updates or corrects an existing fact, update the memory \
+rather than creating a duplicate.
+- Prefer concise, standalone facts that will be useful in future sessions.
+- Do not save temporary information, assumptions, or information that \
+has no long-term value.
+"""
+
 app = FastAPI()
+
+def build_agent() -> Agent:
+    mcp_tools = MCPTools(config_path=MCP_CONFIG)
+    local_tools = LocalTools(workspace=WORKSPACE, memory_file=MEMORY_FILE)
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=local_tools.load_memory())}]
+    
+    return Agent(
+        local_tools=local_tools,
+        mcp_tools=mcp_tools, 
+        models=MODELS, 
+        model_name="local", 
+        messages=messages
+    )
+
+@app.on_event("startup")
+async def startup_event():
+    app.state.exit_stack = AsyncExitStack()
+    await app.state.exit_stack.__aenter__()
+
+    app.state.agent = build_agent()
+    app.state.local_tools = app.state.agent.local_tools
+    app.state.mcp_tools = app.state.agent.mcp_tools
+    await app.state.mcp_tools.connect_mcp(app.state.exit_stack)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    if hasattr(app.state, "exit_stack"):
+        await app.state.exit_stack.__aexit__(None, None, None)
 
 
 class Turn:
@@ -251,7 +323,11 @@ async def run_turn(t: Turn, text: str) -> None:
     """Wrap a scenario in status events, and handle cancel/crash like a real server must."""
     await t.send({"type": "status", "state": "running"})
     try:
-        await pick_scenario(text)(t, text)
+        # await pick_scenario(text)(t, text)
+        agent = app.state.agent
+        reply = await agent.run_agent(text)
+        await t.stream("text", str(reply), chunk=8, delay=0.2)
+        await t.send({"type": "done"})
     except asyncio.CancelledError:
         # Cancelled by the user. The turn still ends cleanly with `done`.
         # (suppress: if the socket itself went away, there's nobody to tell.)
@@ -269,16 +345,22 @@ async def run_turn(t: Turn, text: str) -> None:
 # Operations: request/response calls from the UI (call_operation).
 # ---------------------------------------------------------------------------
 
-FAKE_MEMORY = "- The user is learning how agent harnesses work.\n- They prefer short answers.\n"
+# FAKE_MEMORY = "- The user is learning how agent harnesses work.\n- They prefer short answers.\n"
 
-FAKE_TOOLS = [
-    {"name": "list_files", "description": "List the files in the user's workspace folder.", "origin": "local"},
-    {"name": "read_file", "description": "Read one file from the user's workspace folder.", "origin": "local"},
-    {"name": "write_file", "description": "Write a file in the user's workspace folder.", "origin": "local"},
-    {"name": "save_memory", "description": "Save one short fact about the user to long-term memory.", "origin": "local"},
-    {"name": "get_current_time", "description": "Get the current time in a timezone.", "origin": "mcp"},
-]
+# FAKE_TOOLS = [
+#     {"name": "list_files", "description": "List the files in the user's workspace folder.", "origin": "local"},
+#     {"name": "read_file", "description": "Read one file from the user's workspace folder.", "origin": "local"},
+#     {"name": "write_file", "description": "Write a file in the user's workspace folder.", "origin": "local"},
+#     {"name": "save_memory", "description": "Save one short fact about the user to long-term memory.", "origin": "local"},
+#     {"name": "get_current_time", "description": "Get the current time in a timezone.", "origin": "mcp"},
+# ]
 
+def workspace_snapshot(root: Path) -> list[str]:
+    return sorted(
+        str(p.relative_to(root))
+        for p in root.rglob("*")
+        if p.is_file()
+    )
 
 def available_plugins() -> list[str]:
     """Every plugins/<name>/ui.js. Folders starting with _ or . are scratch space."""
@@ -287,29 +369,47 @@ def available_plugins() -> list[str]:
 
 async def operation(t: Turn, name: str, args: dict):
     if name == "memory.read":
-        return FAKE_MEMORY
+        return app.state.local_tools.load_memory()
+
     if name == "tools.list":
-        return FAKE_TOOLS
-    # Plugins: the server decides what's loaded; the browser asks, and the
-    # server answers with the usual plugin_loaded / plugin_unloaded events.
+        return app.state.agent.all_tool_schemas()
+    
+    if name == "workspace.list":
+        return workspace_snapshot(WORKSPACE)
+
+    if name == "workspace.read":
+        rel = str(args.get("path", ""))
+        path = (WORKSPACE / rel).resolve()
+        if not str(path).startswith(str(WORKSPACE.resolve())):
+            raise ValueError("path outside workspace")
+        if not path.exists() or not path.is_file():
+            return None
+        return path.read_text()
+    
     if name == "plugins.list":
         return [
-            {"name": n, "ui_url": f"/plugins/{n}/ui.js", "loaded": n in t.loaded} for n in available_plugins()
+            {"name": n, "ui_url": f"/plugins/{n}/ui.js", "loaded": n in t.loaded}
+            for n in available_plugins()
         ]
+
     if name == "plugins.load":
         await t.load_plugin(str(args.get("name")))
         return True
+
     if name == "plugins.unload":
         await t.unload_plugin(str(args.get("name")))
         return True
+
     if name == "debug.fail":
         raise RuntimeError("this operation always fails (on purpose)")
-    if name == "debug.plugin_errors":  # lets tests see what the browser reported
+
+    if name == "debug.plugin_errors":
         return t.plugin_errors
+
     if name == "debug.echo":
         return args
-    raise KeyError(f"unknown operation '{name}'")
 
+    raise KeyError(f"unknown operation '{name}'")
 
 # ---------------------------------------------------------------------------
 # The socket

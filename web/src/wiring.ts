@@ -42,7 +42,7 @@ export function startConnection(): void {
 }
 
 /** What the composer (and harnessDebug.runScenario) calls. */
-export function submitUserMessage(text: string, model: string = "local"): boolean {
+export function submitUserMessage(text: string, model: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || useStore.getState().running) return false;
 

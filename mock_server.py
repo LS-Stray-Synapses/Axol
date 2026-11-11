@@ -40,11 +40,11 @@ MODELS: dict[str, ModelConfig] = {
         base_url="http://localhost:11434/v1",
         api_key="ollama",
         model="qwen3.5:2b"
-    )   
+    )
 }
 
 SYSTEM_PROMPT = """You are a helpful personal assistant running inside a \
-custom harness. Be concise.
+custom harness named Axol. Be concise.
 
 The user's workspace folder holds their personal files: notes, todo lists, \
 ideas. You have tools to list, read and write those files. Never claim you \
@@ -423,7 +423,7 @@ async def ws_endpoint(ws: WebSocket):
     await ws.send_json({
         "type": "model_list",
         "models": [
-            {"name": name, "label": f"{name} ({cfg.model})"}
+            {"name": name, "label": cfg.model}
             for name, cfg in app.state.agent.models.items()
         ],
         "selected": app.state.agent.model_name

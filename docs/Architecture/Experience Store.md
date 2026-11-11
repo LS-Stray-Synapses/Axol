@@ -1,53 +1,61 @@
 ---
-status: draft
+status: planned
 owner:
 tags: [component]
 ---
 # Experience Store
 
 ## Purpose
-The glue of Axol. Turns raw run logs into **curated experiences** that feed three consumers:
+
+The long-term design is for Axol to record raw runs and curate them into valuable experiences: model behaviour, failure modes, successful trajectories, and benchmark candidates. That pipeline is still a future architecture goal, but the repo already has the basic ingredients for it: tool calls, memory, model calls, and the mock scenario stream.
+
+## Current foundation
+
+The current codebase naturally produces run data:
+
+- `mock_server.py` emits turn-level events (`thinking`, `text`, `tool_call`, `tool_result`, `done`, `error`)
+- `modules/agent.py` tracks the actual tool call + model response cycle
+- `modules/local_tools.py` records user-relevant state in `memory.md`
+- browser events are already structured enough to replay and inspect later
+
+This means the core data model for a future Experience Store is already emerging, even though the store itself is not yet implemented as a persistent curated database.
+
+## Future design
+
+The architectural intent is still:
 
 | Consumer | Uses experiences as |
 |----------|---------------------|
 | [Adaptation Loop](Adaptation%20Loop.md) / [Harness Forge](Harness%20Forge.md) | signals about how a model behaves in a harness |
-| [Evaluation](Evaluation.md) | **benchmark cases**: problems turned into repeatable tests |
-| [Model Forge](Model%20Forge.md) | **training examples** for future fine-tuning |
-
-Axol is private, so full trajectories are recorded by design.
+| [Evaluation](Evaluation.md) | benchmark cases |
+| [Model Forge](Model%20Forge.md) | training examples |
 
 ## Kinds of experience
-- **Problem**: tool-call errors, malformed output, loops, context overflow, wrong answers, plus the fix that worked (if any).
-- **Success**: good solutions worth imitating.
-- **Correction**: a failure followed by the corrected trajectory (most valuable for training).
 
-## Diagram
-```mermaid
-flowchart LR
-    Log[(Append-only run log)] --> Detect[Detect candidates: automatic rules / evaluator]
-    Detect --> Review{Curation}
-    Review --> XS[(Experience Store)]
-    XS --> Sig[Adaptation signals]
-    XS --> Bench[Benchmark cases]
-    XS --> Train[Training examples]
-```
+- **Problem**: tool-call errors, malformed output, loops, wrong answers, or failed approvals
+- **Success**: good solutions or useful tool-use patterns
+- **Correction**: a failure followed by a fix or adjusted behavior
 
 ## Design notes
-- The **run log is the raw source of truth** (append-only, like dsh's session log). The Experience Store is a curated layer that references log entries, so nothing is lost.
-- Every experience is **labelled once** (kind, model, harness version, outcome, tags) and reused by all three consumers.
-- Experiences record **which model + which harness composition** produced them, so data can be filtered per model/harness generation.
+
+- The **run log is the raw source of truth**. The Experience Store should be a curated layer over it.
+- Each experience should record the model, harness version or configuration, outcome, and labels.
+- Experiences should be reusable across adaptation, benchmark generation, and future fine-tuning.
 
 ## Depends on / used by
-- Depends on: [Harness](Harness.md) runtime run log
+
+- Depends on: [Harness](Harness.md), [Tools](Tools.md), [Memory](Memory.md)
 - Used by: [Adaptation Loop](Adaptation%20Loop.md), [Harness Forge](Harness%20Forge.md), [Evaluation](Evaluation.md), [Model Forge](Model%20Forge.md)
 
 ## Related decisions
+
 - [ADR-0003](../Decisions/ADR-0003-experience-store.md)
 
 ## Open questions
-- [ ] **Curation: automatic, human-approved, or both?** (proposal: automatic capture + human approval before something becomes a benchmark or training example)
-- [ ] Storage: SQLite + files? Parquet/JSONL for training export?
-- [ ] Deduplication of similar failures
-- [ ] Redaction of secrets before data becomes training material
+
+- [ ] curation policy: automatic, human-approved, or both
+- [ ] storage format: SQLite, JSONL, or Parquet export
+- [ ] secret redaction before any training export
+- [ ] deduplication of similar failures
 
 Back to [Overview](Overview.md)

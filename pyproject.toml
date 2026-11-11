@@ -10,4 +10,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "websockets>=13",
+    "mcp>=2.3.0",
+    "openai>=3.46.0",
+    "pydantic>=2.14.3"
 ]

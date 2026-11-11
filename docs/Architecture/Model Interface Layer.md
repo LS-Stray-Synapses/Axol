@@ -1,39 +1,66 @@
 ---
-status: draft
+status: active
 owner:
 tags: [component]
 ---
 # Model Interface Layer
 
 ## Purpose
-One common interface over every model backend (local and API) so the harness can swap models without code changes. Also exposes model *capabilities* (context size, native tool calling, streaming…) for the adaptation loop to use.
 
-## Interface
+The current model interface is intentionally simple and OpenAI-compatible. It allows the runtime to switch between local and remote model endpoints without revising the rest of the agent loop.
+
+## Current implementation
+
+The interface is defined in `modules/models.py` as `ModelConfig`:
+
 ```python
-# TODO: sketch the public API
+class ModelConfig(BaseModel):
+    base_url: str
+    api_key: str = "none"
+    model: str
 ```
 
-## Diagram
+This is then used by `modules/agent.py`:
+
+```python
+cfg = self.models[self.model_name]
+client = AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
+response = await client.chat.completions.create(
+    model=cfg.model,
+    messages=self.messages,
+    tools=self.all_tool_schemas(),
+)
+```
+
+This means the architecture currently targets the OpenAI-compatible API shape that local runtimes like Ollama expose via `/v1`.
+
+## What it supports
+
+- local OpenAI-compatible endpoints
+- remote hosted model APIs with the same interface
+- tool-aware LLM calls using function-calling schemas
+- model selection via a simple registry (`self.models`)
+
+The mock server binds the current prototype to local models such as:
+
+- `local` → `qwen3.5:4b`
+- `local-small` → `qwen3.5:2b`
+
+## Runtime flow
+
 ```mermaid
-classDiagram
-    class ModelBackend {
-        <<interface>>
-        +generate(messages, params) Response
-        +stream(messages, params) Iterator
-        +capabilities() Capabilities
-    }
-    ModelBackend <|.. LocalBackend
-    ModelBackend <|.. APIBackend
+flowchart LR
+    Agent[Agent] --> Config[ModelConfig]
+    Config --> Client[AsyncOpenAI client]
+    Client --> Model[Local or remote endpoint]
+    Model --> Response[Chat completion + tool calls]
+    Response --> Agent
 ```
 
-## Depends on / used by
-- Depends on: model providers / local runtimes
-- Used by: [Harness](Harness.md); new models from the [Model Forge](Model%20Forge.md) register here
+The current design is deliberately thin and composable: the harness asks for a model by name and the registry returns the endpoint + credentials + model identifier.
 
-## Related decisions
--
+## Status
 
-## Open questions
-- [ ]
+This is the working prototype model abstraction. The broader design still plans for additional capabilities like richer backend metadata and adaptation-aware model selection, but the repo already contains the concrete foundation for that evolution.
 
 Back to [Overview](Overview.md)

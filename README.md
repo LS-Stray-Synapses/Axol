@@ -1,12 +1,21 @@
 # Axol
 
-**A self-adapting agent architecture with its own harness.**
+**A self-adapting agent architecture with a live prototype harness and web UI.**
 
-Axol is a general-purpose agent architecture built from the ground up. It is model-agnostic, so it runs with any model, local or API-based. Its harness watches how a model behaves and adjusts itself to get the best out of that model.
+Axol is a model-agnostic agent architecture built around a harness that can adapt to the model it is running. The project is no longer only a design document: the repo includes a working mock backend, a browser client, and a real tool/model integration pattern that matches the intended runtime architecture.
 
-> ⚠️ **Status: early development.** Axol is being designed and built. Expect frequent changes; APIs and structure aren't stable yet.
+> ⚠️ **Status: prototype in progress.** The system is implemented as a working mock-driven architecture with a live UI, not a finished production harness yet.
 
 ---
+
+## What is implemented now
+
+- **Web UI** in `web/` with a structured event protocol defined in `web/src/contract.ts`
+- **Mock harness backend** in `mock_server.py` that produces the same server→browser event stream the final harness should produce
+- **Local workspace tools** in `modules/local_tools.py` for file reading/writing and memory persistence
+- **MCP tool integration** in `modules/mcp_tools.py` for external tool servers described in `mcp_server.json`
+- **Model abstraction** in `modules/models.py` and `modules/agent.py` using OpenAI-compatible model configs and tool execution
+- **Plugin runtime patterns** in the browser and server for loading UI plugins from `plugins/`
 
 ## Why Axol?
 
@@ -20,42 +29,47 @@ Most agent frameworks are tuned for one model or provider, and switching models 
   - **Local models** (run on your own hardware)
   - **API models** (hosted providers)
 - **Self-adapting harness** – The harness learns from how the current model performs and adapts its behaviour, such as prompting, tool use, context handling and control flow, so it doesn't depend on hand-tuning.
-- **Custom model (future)** – Later on, we plan to train a custom model built specifically for the Axol harness.
+- **Prototype plugin runtime** – The current implementation already demonstrates plugin-style loading, tool execution, and browser/server event flow.
 
-## Architecture overview
+## Current architecture
 
+```text
+┌─────────────────────────────────────────────┐
+│                 Axol prototype               │
+│                                             │
+│   ┌───────────────────────────────────────┐ │
+│   │        Web UI / browser client       │ │
+│   │   React app + socket event contract │ │
+│   └──────────────────────┬────────────────┘ │
+│                          │                  │
+│   ┌──────────────────────▼────────────────┐ │
+│   │     Mock harness / runtime adapter     │ │
+│   │  agent loop, tool calls, approvals,   │ │
+│   │   plugin & scenario orchestration      │ │
+│   └───────────────┬────────────────────────┘ │
+│                   │                          │
+│   ┌───────────────▼────────────────┐        │
+│   │  Local tools + MCP tools +     │        │
+│   │  model config / OpenAI client  │        │
+│   └────────────────────────────────┘        │
+└─────────────────────────────────────────────┘
 ```
-┌─────────────────────────────────────────┐
-│                  Axol                   │
-│                                         │
-│   ┌─────────────────────────────────┐   │
-│   │      Self-Adapting Harness      │   │
-│   │  (orchestration, tools, memory, │   │
-│   │   feedback & adaptation loop)   │   │
-│   └────────────────┬────────────────┘   │
-│                    │                    │
-│   ┌────────────────▼────────────────┐   │
-│   │       Model Interface Layer     │   │
-│   └───────┬─────────────────┬───────┘   │
-└───────────┼─────────────────┼───────────┘
-            │                 │
-     ┌──────▼──────┐   ┌──────▼──────┐
-     │ Local models│   │ API models  │
-     └─────────────┘   └─────────────┘
-```
 
-- **Self-Adapting Harness** – Runs the agent loop: planning, tool calls, memory and evaluation. It feeds results back in to adjust how it works with the current model.
-- **Model Interface Layer** – One common interface over every model backend, so the harness can swap models without code changes.
-- **Model backends** – Any local or API model that plugs into the interface layer.
+- **Web UI** – React-based front end that listens for harness events and renders them as thinking, text, tool calls and approvals.
+- **Mock harness** – `mock_server.py` acts as the prototype runtime, emitting the event contract the final server should adopt.
+- **Model interface** – `ModelConfig` + `AsyncOpenAI` setup provides an OpenAI-compatible adapter for local or hosted backends.
+- **Tool layer** – `LocalTools` and `MCPTools` expose both workspace utilities and external MCP-capable tools.
 
-## Roadmap
+## Roadmap / status
 
-- [ ] Core harness and agent loop
-- [ ] Unified model interface (local and API backends)
-- [ ] Self-adaptation loop
-- [ ] Tooling and memory systems
-- [ ] Evaluation and benchmarks
-- [ ] Custom Axol model
+- [x] Browser event contract and mock runtime
+- [x] Local workspace tools and memory
+- [x] MCP tool connection pattern
+- [x] OpenAI-compatible model adapter
+- [x] UI plugin loading model
+- [ ] Production harness runtime kernel
+- [ ] Real adaptation loop + evaluation pipeline
+- [ ] Model forge / custom model work
 
 ## Inspiration
 
@@ -63,8 +77,7 @@ Axol was inspired by the harness design behind **DeepSeek**.
 
 ## Getting started
 
-The web UI is built. It runs against a **mock back end** while we build the real harness step by step.
-To see how the two sides talk, read [docs/Architecture/Front end.md](docs/Architecture/Front%20end.md).
+The web UI is built and runs against a **mock backend** while the real harness is still being implemented. To see how the two sides talk, read [docs/Architecture/Front end.md](docs/Architecture/Front%20end.md).
 
 **Prerequisites:** Python ≥ 3.11 and Node.js ≥ 22 (`node -v`).
 
@@ -75,7 +88,7 @@ git clone https://github.com/LS-Stray-Synapses/Axol.git && cd Axol
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# Web UI deps (exact versions from package-lock.json)
+# Web UI deps
 cd web && npm ci && cd ..
 ```
 
@@ -92,19 +105,21 @@ Type `/scenario tools` (or `approval`, `error`, `cancel`, …) in the chat to pl
 
 ### Repo layout
 
-```
+```text
 web/              React + TypeScript UI   (web/src/contract.ts = the event contract)
 plugins/          UI plugins the server can load at runtime (plain JS, no build)
 mock_server.py    fake back end with scripted scenarios
+modules/          Python tool + model + agent runtime layer
 docs/             design notes (Obsidian vault)
-requirements.txt  pinned Python deps     pyproject.toml: project metadata
+requirements.txt  pinned Python deps
+pyproject.toml    project metadata
 ```
 
 ## Contributing
 
 Design notes, architecture diagrams and decision records live in [`docs/`](docs/Home.md), which is an [Obsidian](https://obsidian.md) vault. Open `docs/` as a vault, or read it on GitHub. See [docs/Contributing.md](docs/Contributing.md).
 
-Axol is in its early stages. Ideas, feedback and discussion are welcome: open an issue to get involved.
+Axol is in an active prototype stage. Ideas, feedback and discussion are welcome: open an issue to get involved.
 
 ## License
 

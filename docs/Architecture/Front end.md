@@ -1,196 +1,125 @@
 ---
-status: draft
+status: active
 owner: Lenos
 tags: [component, guide]
 ---
 # Front end ↔ Harness: how they talk
 
-A short guide to keep in mind while we build the harness. The UI already exists (`web/`) and runs against a fake back end (`mock_server.py`). Our job is to build the **real harness so that it sends the same events**. The UI will then work with it unchanged.
+This document reflects the implemented prototype. The browser UI in `web/` is already connected to a mock backend in `mock_server.py`, and both sides follow the event contract in `web/src/contract.ts`.
 
 > **Source of truth:** `web/src/contract.ts`. If this note and that file disagree, the file wins.
 
 ## 1. The big picture
 
-There is **one WebSocket** (`/ws`). Both sides send small **JSON objects**, and each one has a `type` field. That's the whole protocol.
+There is a single WebSocket (`/ws`). The browser and the Python side exchange small JSON objects with a `type` field. The UI is deliberately dumb: it does not understand the agent; it just renders the event stream.
 
 ```mermaid
 flowchart LR
     subgraph Browser["Browser (web/)"]
-        UI[React UI] --- B[backend.ts<br/>only file that touches the socket]
+        UI[React UI] --- B[backend.ts<br/>WebSocket adapter]
     end
-    subgraph Server["Python server"]
-        WS["/ws endpoint"] --- H[Harness<br/>agent loop, tools, memory]
+    subgraph Server["Python runtime"]
+        WS["/ws endpoint"] --- H[Agent runtime<br/>mock_server.py + Agent]
         P["/plugins/ (static files)"]
     end
     B <-- "JSON events" --> WS
     UI -. "import() plugin ui.js" .-> P
-    H <--> M[(Model)]
+    H --> Tools[Local tools + MCP tools]
+    H --> Models[Model config / OpenAI-compatible backend]
 ```
 
-Today the Python side is `mock_server.py`, which plays back scripted scenarios. Later it will be the real harness. **The browser can't tell the difference**, and that's the point.
+The Python side is currently `mock_server.py`, which plays scripted scenarios while the real harness runtime is still being built. The browser cannot tell the difference between a mock and a production server because the  protocol is the real interface.
 
-## 2. The mental model: the harness *narrates*, the UI *draws*
+## 2. Contract shape
 
-The UI has **no logic about agents**. It doesn't know what a model is. It listens to the harness describing what it's doing ("I'm thinking…", "I'm calling `read_file`…", "here's the result…") and draws it.
+The contract is defined in `web/src/contract.ts` and includes both server→browser and browser→server events.
 
-So when you write the harness, ask yourself one question at every step: **"What would the user want to see right now?"** Then `emit` that event.
+### Server → browser
 
-The two sides have four kinds of conversation:
-
-| Conversation | Shape | Example |
+| `type` | fields | purpose |
 |---|---|---|
-| **Chat turn** | user sends 1 message → harness streams many events | `user_message` → `thinking`… `text`… `done` |
-| **Approval** | harness asks a question and **waits** for the answer | `approval_request` → `approval_reply` |
-| **Operation** | UI asks for data, harness answers once | `call_operation("memory.read")` → `operation_result` |
-| **Plugin** | harness tells the UI to load extra UI code | `plugin_loaded` → browser imports `/plugins/x/ui.js` |
+| `status` | `state` | running/idle lifecycle |
+| `model_list` | `models`, `selected` | model selector state |
+| `thinking` | `text` | streamed reasoning block |
+| `text` | `text` | streamed answer content |
+| `tool_call` | `id`, `name`, `args` | tool card starts |
+| `tool_result` | `id`, `name`, `result`, `is_error` | tool card resolves |
+| `approval_request` | `id`, `tool`, `args`, `reason` | user approval request |
+| `done` | `usage?` | turn completion |
+| `error` | `message` | fatal turn error |
+| `operation_result` | `request_id`, `ok`, `result?`, `error?` | response to UI operation |
+| `plugin_loaded` | `name`, `ui_url` | plugin activation |
+| `plugin_unloaded` | `name` | plugin teardown |
 
-## 3. One turn, end to end
+### Browser → server
 
-This is the main flow. Each arrow is one JSON event.
+| `type` | fields | purpose |
+|---|---|---|
+| `user_message` | `text`, `model` | send a user prompt |
+| `approval_reply` | `id`, `approved` | approve or deny a tool action |
+| `cancel` | — | cancel running turn |
+| `call_operation` | `request_id`, `name`, `args` | request a UI/server operation |
+| `plugin_error` | `name`, `slot`, `error` | plugin crash report |
+
+## 3. Example turn flow
 
 ```mermaid
 sequenceDiagram
     participant UI as Browser
-    participant H as Harness
-    participant M as Model
+    participant H as Harness / mock server
+    participant M as Model backend
     participant T as Tool
 
     UI->>H: user_message {text}
     H-->>UI: status {state: "running"}
-    H->>M: messages + tools
-    M-->>H: (stream) reasoning tokens
-    H-->>UI: thinking {text: "I should…"}   (many small deltas)
-    M-->>H: tool call: read_file(notes.md)
-    H-->>UI: tool_call {id: "c1", name, args}
-    opt tool needs permission
-        H-->>UI: approval_request {id: "c1", tool, args, reason}
-        UI->>H: approval_reply {id: "c1", approved: true}
-    end
-    H->>T: run read_file
-    T-->>H: "file contents…"
-    H-->>UI: tool_result {id: "c1", result, is_error: false}
-    H->>M: messages + tool result
-    M-->>H: (stream) answer tokens
-    H-->>UI: text {text: "The notes say…"}   (many small deltas)
-    H-->>UI: done {usage: {input_tokens, output_tokens}}
+    H->>M: message + tool schemas
+    M-->>H: stream / tool call
+    H-->>UI: thinking {text: "I should…"}
+    H-->>UI: tool_call {id: "c1", name: "read_file", args: {...}}
+    H-->>UI: approval_request {id: "c1", ...}
+    UI->>H: approval_reply {id: "c1", approved: true}
+    H->>T: execute tool
+    T-->>H: result
+    H-->>UI: tool_result {id: "c1", ...}
+    H-->>UI: text {text: "Here is the answer…"}
+    H-->>UI: done {usage: {...}}
     H-->>UI: status {state: "idle"}
 ```
 
-### The same thing, as harness code
+The real harness should follow this same lifecycle. The mock server already demonstrates the exact pattern for `thinking`, `tool_call`, `tool_result`, `approval_request`, `error`, `cancel`, and `done`.
 
-This is the cheat sheet. It's a sketch of the agent loop with the `emit` calls in the right places, not real code yet:
+## 4. Rules the harness must keep
 
-```python
-async def run_turn(user_text):
-    await emit({"type": "status", "state": "running"})           # 1. always first
-    try:
-        messages.append({"role": "user", "content": user_text})
-        while True:                                                # one step per loop
-            reply = await model.stream(messages, tools)
-            async for delta in reply:
-                if delta.reasoning: await emit({"type": "thinking", "text": delta.reasoning})
-                if delta.content:   await emit({"type": "text",     "text": delta.content})
+1. `status: running` must be sent at the beginning of each turn and `status: idle` at the end, even on error or cancel.
+2. Every turn ends with `done` or `error`.
+3. Every `tool_call` gets exactly one `tool_result` with the same `id`.
+4. `approval_request.id` must match the same tool call's `id`.
+5. `thinking` and `text` are incremental deltas, not whole-message rewrites.
+6. Only one turn can run per WebSocket connection at a time.
+7. `plugin_loaded.ui_url` must live under `/plugins/` on the same origin.
+8. Long-running work must not block the socket loop; user actions like `cancel` and `approval_reply` must still be processed.
 
-            if not reply.tool_calls:                               # nothing owed → turn over
-                await emit({"type": "done", "usage": reply.usage})
-                return
+## 5. How it matches the code today
 
-            for call in reply.tool_calls:
-                await emit({"type": "tool_call", "id": call.id, "name": call.name, "args": call.args})
-                if needs_approval(call):
-                    ok = await ask_user(call)                      # sends approval_request, waits
-                    if not ok:
-                        await emit({"type": "tool_result", "id": call.id, "name": call.name,
-                                    "result": "user denied this action", "is_error": True})
-                        continue
-                result, is_error = await run_tool(call)
-                await emit({"type": "tool_result", "id": call.id, "name": call.name,
-                            "result": result, "is_error": is_error})
-                messages.append(tool_message(call, result))
-    except CancelledError:
-        await emit({"type": "done"})                               # user pressed Stop
-    except Exception as e:
-        await emit({"type": "error", "message": str(e)})
-    finally:
-        await emit({"type": "status", "state": "idle"})            # 2. always last
-```
+The current implementation already includes the important parts:
 
-`mock_server.py` already has a working `run_turn`, `ask()` and cancel handling. Copy its structure when we build the real one.
+- `mock_server.py` creates `Turn` objects and streams scenario events as the harness would
+- `modules/agent.py` manages model calls and tool dispatch
+- `modules/local_tools.py` and `modules/mcp_tools.py` define the actual tool providers
+- `web/src/contract.ts` enforces runtime validation for every browser/server event
 
-## 4. All the events
-
-**Harness → Browser**
-
-| `type` | fields | the UI… |
-|---|---|---|
-| `status` | `state: "idle" \| "running"` | disables/enables the composer, shows Stop |
-| `thinking` | `text` | appends to the muted, collapsible "Thinking…" block |
-| `text` | `text` | appends to the answer (rendered as markdown) |
-| `tool_call` | `id, name, args` | shows a tool card with a spinner |
-| `tool_result` | `id, name, result, is_error` | fills **the card with the same `id`** (red if error) |
-| `approval_request` | `id, tool, args, reason` | opens the Allow / Deny dialog |
-| `done` | `usage?` | closes the turn, shows token counts |
-| `error` | `message` | closes the turn with an error |
-| `operation_result` | `request_id, ok, result?, error?` | resolves the matching `callOperation` promise |
-| `plugin_loaded` | `name, ui_url` | imports that JS file, calls its `activate()` |
-| `plugin_unloaded` | `name` | removes everything that plugin added |
-
-**Browser → Harness**
-
-| `type` | fields | the harness should… |
-|---|---|---|
-| `user_message` | `text` | start a turn (ignore it if one is already running) |
-| `approval_reply` | `id, approved` | resolve the waiting `ask_user` |
-| `cancel` | — | cancel the running turn task |
-| `call_operation` | `request_id, name, args` | run the operation, answer with `operation_result` |
-| `plugin_error` | `name, slot, error` | log it (a plugin crashed in the browser) |
-
-**Operations the UI already calls:** `memory.read` (string), `tools.list` (list of `{name, description, origin}`), `plugins.list`, `plugins.load`, `plugins.unload`.
-
-## 5. Rules the harness must keep
-
-The UI is forgiving: a bad event is logged and dropped, and the UI won't crash. Even so, break these rules and the screen will be wrong:
-
-1. **`status: running` first and `status: idle` last, every turn**, even on error or cancel. Use `finally`.
-2. **Every turn ends with `done` or `error`.**
-3. **Every `tool_call` gets exactly one `tool_result` with the same `id`.** A denied approval still sends a `tool_result` (with `is_error: true`).
-4. **`approval_request.id` = the tool call's `id`**, sent *after* the `tool_call`. That's how the UI knows which card is waiting.
-5. **`thinking` and `text` are deltas**: send only the new piece and never the whole text so far.
-6. **One turn at a time** per connection.
-7. **Answer every `call_operation`** with its `request_id` within **10 s**, or the UI gives up. Answer `ok: false` with an `error` instead of staying silent.
-8. **`plugin_loaded.ui_url` must start with `/plugins/`** on the same server. The UI refuses anything else, because plugin code runs with full page access.
-9. **Never block the socket read loop.** Run the turn as a task, so `cancel` and `approval_reply` can still arrive while it runs.
+This is the prototype contract the real server should aim to satisfy.
 
 ## 6. Try it yourself
 
 ```bash
-# terminal 1: the fake harness (from the repo root)
+# terminal 1: fake harness
 .venv/bin/uvicorn mock_server:app --port 8000 --reload
 
-# terminal 2: the UI
-cd web && npm run dev          # open http://localhost:5173
+# terminal 2: UI
+cd web && npm run dev
 ```
 
-Type `/scenario <name>` in the chat to play one of these: `basic`, `tools`, `approval`, `error`, `long`, `cancel`, `xss`, `malformed`, `plugin`, `unplug`, `plugin_crash`, `plugin_healthy`.
-
-To **watch the raw events**, open the browser console and run:
-
-```js
-harnessDebug.getEventLog(20)   // last 20 events, both directions
-harnessDebug.getState()        // what the UI currently believes
-harnessDebug.selfTest()        // runs the UI's built-in checks
-```
-
-> **Tip:** the mock scenarios are a ready-made **spec for the real harness**. When the real harness can produce the same event sequence as `tools`, `approval`, `error` and `cancel`, it's wired correctly.
-
-## 7. How this fits the Axol architecture
-
-The UI is a **client of the [Harness Runtime](Harness.md)**. The UI events are basically a *live view of the run log*: every `tool_call` / `tool_result` / `text` we show the user is also something we want to record for the [Experience Store](Experience%20Store.md). One option is a single internal event stream that both the WebSocket and the run log subscribe to. That's an open question below.
-
-## Open questions
-- [ ] Should the WebSocket adapter be a plugin that subscribes to the kernel's event stream (same stream as the run log)?
-- [ ] The link between `approval_request` and its `tool_call` is only by convention (same `id`). Make it an explicit `tool_call_id` field?
-- [ ] There is no turn id or session id, so after a reconnect the UI can't ask "what did I miss?". Do we need history replay?
-- [ ] `usage` is per turn. Do we also want per-step usage for the Adaptation Loop?
+Then open `http://localhost:5173` and use `/scenario` commands like `basic`, `tools`, `approval`, `error`, `cancel`, `plugin`, `plugin_crash`, and `plugin_healthy`.
 
 Back to [Overview](Overview.md)

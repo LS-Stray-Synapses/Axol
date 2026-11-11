@@ -3,8 +3,21 @@ tags: [index]
 ---
 # Axol Vault
 
-Design notes, architecture and decisions for **Axol**, a self-adapting agent architecture.
+This vault contains the design notes, architecture docs, and decision records for **Axol**, a model-agnostic agent architecture with a working prototype runtime and browser UI.
+
 This folder is an [Obsidian](https://obsidian.md) vault. Open `docs/` as a vault in Obsidian, or just read it on GitHub. Everything is plain Markdown.
+
+## Current status
+
+The repo is no longer only a concept document. It currently includes:
+
+- a working React web UI in `web/`
+- a mock harness backend in `mock_server.py`
+- model + tool layers in `modules/`
+- local memory persistence via `memory.md`
+- MCP tool integration via `mcp_server.json`
+
+The project is still a prototype, but the architecture is already concrete enough to test the event contract and runtime flow.
 
 ## Map
 
@@ -20,4 +33,5 @@ This folder is an [Obsidian](https://obsidian.md) vault. Open `docs/` as a vault
 
 1. [Architecture overview](Architecture/Overview.md)
 2. [Visual map (Canvas)](Architecture/Axol.canvas): open in Obsidian
-3. [How we work in this vault](Contributing.md)
+3. [Front end / harness protocol](Architecture/Front%20end.md)
+4. [How we work in this vault](Contributing.md)

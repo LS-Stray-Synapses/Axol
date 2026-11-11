@@ -5,12 +5,14 @@ tags: [component]
 ---
 # Model Forge
 
-> **In scope, implemented later.** Other components must be designed so this can plug in without rework.
+> **Planned later.** The current repo is a working runtime prototype; custom model creation is a future extension.
 
 ## Purpose
-Creates new models and fine-tunes existing ones **for the Axol harness**, using training examples curated in the [Experience Store](Experience%20Store.md). Long-term goal: a custom Axol model.
 
-## Diagram
+The Model Forge is the long-term layer that creates or fine-tunes models specifically for the Axol harness, using examples produced from real runs and benchmark cases. This is not implemented yet, but the architecture is designed so it can be added without reworking the rest of the stack.
+
+## Future data flow
+
 ```mermaid
 flowchart LR
     XS[(Experience Store: training examples)] --> DS[Dataset builder]
@@ -20,18 +22,21 @@ flowchart LR
     Reg --> HF[Harness Forge builds a harness for it]
 ```
 
-## What must be true *now* so this works later
-- Run logs keep enough detail to rebuild exact model inputs/outputs ("model-visible means logged").
-- Training examples are stored in a model-agnostic format (messages + tool calls + outcome + label).
-- Benchmarks are versioned so model generations are comparable.
+## What must be true later
+
+- run logs retain enough detail to reconstruct exact model-visible inputs and outputs
+- training examples stay model-agnostic and include messages, tool calls, and labels
+- benchmarks are versioned so model generations remain comparable
 
 ## Depends on / used by
+
 - Depends on: [Experience Store](Experience%20Store.md), [Evaluation](Evaluation.md)
-- Used by: [Model Interface Layer](Model%20Interface%20Layer.md) (new backends), [Harness Forge](Harness%20Forge.md)
+- Used by: [Model Interface Layer](Model%20Interface%20Layer.md), [Harness Forge](Harness%20Forge.md)
 
 ## Open questions
-- [ ] Fine-tune methods first (LoRA/QLoRA on local models?)
-- [ ] Hardware / budget assumptions
-- [ ] Dataset format standard (e.g. chat JSONL with tool calls)
+
+- [ ] fine-tune methods first (LoRA / QLoRA on local models?)
+- [ ] hardware and budget assumptions
+- [ ] dataset format standard (chat JSONL with tool calls, etc.)
 
 Back to [Overview](Overview.md)

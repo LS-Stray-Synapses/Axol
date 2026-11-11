@@ -419,6 +419,16 @@ async def operation(t: Turn, name: str, args: dict):
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
+
+    await ws.send_json({
+        "type": "model_list",
+        "models": [
+            {"name": name, "label": f"{name} ({cfg.model})"}
+            for name, cfg in app.state.agent.models.items()
+        ],
+        "selected": app.state.agent.model_name
+    })
+    
     t = Turn(ws)
     try:
         while True:
@@ -429,6 +439,12 @@ async def ws_endpoint(ws: WebSocket):
             kind = msg.get("type") if isinstance(msg, dict) else None
 
             if kind == "user_message":
+                selected_model = str(msg.get("model") or app.state.agent.model_name)
+
+                if selected_model in app.state.agent.models:
+                    app.state.agent.model_name = selected_model
+                    print(f"[model switch] {selected_model} -> {app.state.agent.models[selected_model].model}")
+
                 if t.task and not t.task.done():
                     continue  # one turn at a time; the UI disables input anyway
                 t.task = asyncio.create_task(run_turn(t, str(msg.get("text", ""))))

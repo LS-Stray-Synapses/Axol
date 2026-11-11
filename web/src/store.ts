@@ -15,6 +15,10 @@ export interface ChatState extends PublicState {
   openTurnId: string | null;
   /** user pressed Stop; the next `done` marks the turn as stopped */
   cancelRequested: boolean;
+  /** list of models the backend exposed */
+  models: Array<{ name: string; label: string }>;
+  /** currently selected model name */
+  selectedModel: string;
 }
 
 export const initialState: ChatState = {
@@ -25,6 +29,8 @@ export const initialState: ChatState = {
   plugins: {},
   openTurnId: null,
   cancelRequested: false,
+  models: [],
+  selectedModel: "",
 };
 
 let idCounter = 0;
@@ -67,11 +73,15 @@ function closeTurn(state: ChatState, patch: Partial<ChatMessage>): ChatState {
 
 export function reduce(state: ChatState, e: ServerEvent): ChatState {
   switch (e.type) {
+    case "model_list":
+      return {
+        ...state,
+        models: e.models,
+        selectedModel: e.selected,
+      };
+
     case "status": {
       const running = e.state === "running";
-      // Going idle with a turn still open means the back end ended the turn
-      // without `done` (e.g. it was cancelled). Close it so the next turn
-      // starts a new message instead of appending to this one.
       const next = { ...state, running };
       return running ? next : closeTurn(next, state.cancelRequested ? { stopped: true } : {});
     }
@@ -80,7 +90,6 @@ export function reduce(state: ChatState, e: ServerEvent): ChatState {
       return updateTurn(state, (m) => ({ ...m, blocks: appendDelta(m.blocks, "thinking", e.text) }));
 
     case "text":
-      // The answer started, so collapse the thinking that led to it.
       return updateTurn(state, (m) => ({
         ...m,
         blocks: appendDelta(finishThinking(m.blocks), "text", e.text),
@@ -89,7 +98,6 @@ export function reduce(state: ChatState, e: ServerEvent): ChatState {
     case "tool_call":
       return updateTurn(state, (m) => {
         const blocks = finishThinking(m.blocks);
-        // Idempotent: a repeated tool_call for the same id updates, not duplicates.
         const i = blocks.findIndex((b) => b.kind === "tool" && b.id === e.id);
         const card: Block = { kind: "tool", id: e.id, name: e.name, args: e.args, done: false, isError: false };
         if (i === -1) return { ...m, blocks: [...blocks, card] };
@@ -99,8 +107,6 @@ export function reduce(state: ChatState, e: ServerEvent): ChatState {
       });
 
     case "tool_result": {
-      // Match by id anywhere in the chat (newest first), so a result still
-      // lands on its card even if it arrives after the turn was closed.
       const messages = state.messages.slice();
       for (let mi = messages.length - 1; mi >= 0; mi--) {
         const msg = messages[mi]!;
@@ -111,7 +117,6 @@ export function reduce(state: ChatState, e: ServerEvent): ChatState {
         messages[mi] = { ...msg, blocks };
         return { ...state, messages };
       }
-      // A result with no matching call: show it anyway rather than drop it.
       return updateTurn(state, (m) => ({
         ...m,
         blocks: [...m.blocks, { kind: "tool", id: e.id, name: e.name, args: {}, done: true, isError: e.is_error, result: e.result }],
@@ -130,8 +135,6 @@ export function reduce(state: ChatState, e: ServerEvent): ChatState {
         state.cancelRequested ? { stopped: true } : {},
       );
 
-    // These don't change chat state: approvals live in approvals.ts, plugins
-    // in plugins.ts, operation results are settled in backend.ts.
     case "approval_request":
     case "operation_result":
     case "plugin_loaded":
@@ -173,15 +176,13 @@ export function addUserMessage(text: string): void {
   flushServerEvents();
   useStore.setState((s) => ({
     messages: [...s.messages, { id: newId("u"), role: "user", blocks: [{ kind: "text", text }] }],
-    openTurnId: null, // whatever comes next belongs to a new assistant turn
+    openTurnId: null,
   }));
 }
 
 export function setConnectionState(connection: ConnectionState): void {
   flushServerEvents();
   useStore.setState((s) => {
-    // Lost the socket mid-turn: the server's side of the turn is gone with it,
-    // so don't leave the composer disabled forever.
     if (connection !== "open" && s.running) {
       return closeTurn({ ...s, connection, running: false }, { error: "connection lost" });
     }
@@ -192,6 +193,10 @@ export function setConnectionState(connection: ConnectionState): void {
 export function markCancelRequested(): void {
   flushServerEvents();
   useStore.setState({ cancelRequested: true });
+}
+
+export function setSelectedModel(model: string): void {
+  useStore.setState({ selectedModel: model });
 }
 
 export function setPluginInfo(name: string, info: PluginInfo | null): void {

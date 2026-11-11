@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Slot } from "../slots";
-import { useStore } from "../store";
+import { setSelectedModel, useStore } from "../store";
 import { stopTurn, submitUserMessage } from "../wiring";
 
 export function Composer() {
   const running = useStore((s) => s.running);
   const connected = useStore((s) => s.connection === "open");
+  const models = useStore((s) => s.models ?? []);
+  const selectedModel = useStore((s) => s.selectedModel ?? "");
   const [text, setText] = useState("");
-  const [selectedModel, setSelectedModel] = useState("local");
   const box = useRef<HTMLTextAreaElement>(null);
   const disabled = running || !connected;
 
@@ -44,8 +45,14 @@ export function Composer() {
           className="h-10 rounded-md border border-border bg-bg px-2 text-sm"
           aria-label="Model"
         >
-          <option value="local">local (qwen3.5:4b)</option>
-          <option value="local-small">local-small (qwen3.5:2b)</option>
+          {models.length === 0 ? (<option value="">Loading models…</option>):
+            (
+              models.map((model: { name: string; label: string }) => (
+                <option key={model.name} value={model.name}>
+                  {model.label}
+                </option>
+            ))
+          )}
         </select>
 
         <textarea

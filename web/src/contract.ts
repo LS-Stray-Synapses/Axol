@@ -13,6 +13,7 @@ export interface Usage {
 
 export type ServerEvent =
   | { type: "status"; state: "idle" | "running" }
+  | { type: "model_list"; models: Array<{ name: string; label: string }>; selected: string }
   | { type: "thinking"; text: string }
   | { type: "text"; text: string }
   | { type: "tool_call"; id: string; name: string; args: Record<string, unknown> }
@@ -30,7 +31,7 @@ export type EventOf<T extends ServerEventType> = Extract<ServerEvent, { type: T 
 // ---------------------------------------------------------------- browser → server
 
 export type ClientEvent =
-  | { type: "user_message"; text: string }
+  | { type: "user_message"; text: string; model: string }
   | { type: "approval_reply"; id: string; approved: boolean }
   | { type: "cancel" }
   | { type: "call_operation"; request_id: string; name: string; args: Record<string, unknown> }
@@ -50,6 +51,14 @@ const oneOf = (...xs: unknown[]): Check => (v) => xs.includes(v);
 const usage: Check = (v) =>
   obj(v) && num((v as Usage).input_tokens) && num((v as Usage).output_tokens);
 
+const modelEntry: Check = (v) =>
+  obj(v) &&
+  str((v as { name?: unknown }).name) &&
+  str((v as { label?: unknown }).label);
+
+const modelList: Check = (v) =>
+  Array.isArray(v) && v.every((item) => modelEntry(item));
+
 // Plugin code runs inside the page with full access, so only accept plugin
 // URLs from our own server's /plugins/ folder, never an arbitrary origin.
 // (Not part of the contract table, but a policy the browser enforces.)
@@ -68,6 +77,7 @@ const pluginUrl: Check = (v) => {
 // validating it is a compile error.
 const SERVER_CHECKS: { [T in ServerEventType]: Record<Exclude<keyof EventOf<T>, "type">, Check> } = {
   status: { state: oneOf("idle", "running") },
+  model_list: { models: modelList, selected: str },
   thinking: { text: str },
   text: { text: str },
   tool_call: { id: str, name: str, args: obj },

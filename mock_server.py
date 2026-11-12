@@ -21,7 +21,8 @@ from fastapi.staticfiles import StaticFiles
 from modules import LocalTools, MCPTools, ModelConfig, Agent
 import os
 import asyncio
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
+
 
 ROOT = Path(__file__).parent
 WORKSPACE = ROOT / "workspace"
@@ -31,12 +32,17 @@ PLUGINS_DIR = ROOT / "plugins"
 DIST_DIR = ROOT / "web" / "dist"
 
 MODELS: dict[str, ModelConfig] = {
-    "local": ModelConfig(
+    "bonsai-2:27b": ModelConfig(
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",
+        model="bonsai-2:27b"
+    ),
+    "qwen3.5:4b": ModelConfig(
         base_url="http://localhost:11434/v1",
         api_key="ollama",
         model="qwen3.5:4b"
     ),
-    "local-small": ModelConfig(
+    "qwen3.5:2b": ModelConfig(
         base_url="http://localhost:11434/v1",
         api_key="ollama",
         model="qwen3.5:2b"
@@ -65,7 +71,6 @@ rather than creating a duplicate.
 has no long-term value.
 """
 
-app = FastAPI()
 
 def build_agent() -> Agent:
     mcp_tools = MCPTools(config_path=MCP_CONFIG)
@@ -77,24 +82,41 @@ def build_agent() -> Agent:
         local_tools=local_tools,
         mcp_tools=mcp_tools, 
         models=MODELS, 
-        model_name="local", 
+        model_name="bonsai-2:27b", 
         messages=messages
     )
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     app.state.exit_stack = AsyncExitStack()
     await app.state.exit_stack.__aenter__()
+    try:
+        app.state.agent = build_agent()
+        app.state.local_tools = app.state.agent.local_tools
+        app.state.mcp_tools = app.state.agent.mcp_tools
+        await app.state.mcp_tools.connect_mcp(app.state.exit_stack)
+        yield
+    finally:
+        if hasattr(app.state, "exit_stack"):
+            await app.state.exit_stack.__aexit__(None, None, None)
 
-    app.state.agent = build_agent()
-    app.state.local_tools = app.state.agent.local_tools
-    app.state.mcp_tools = app.state.agent.mcp_tools
-    await app.state.mcp_tools.connect_mcp(app.state.exit_stack)
+app = FastAPI(lifespan=lifespan)
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    if hasattr(app.state, "exit_stack"):
-        await app.state.exit_stack.__aexit__(None, None, None)
+# Instead of having 2 handlers we use the lifespan (look above)
+# @app.on_event("startup")
+# async def startup_event():
+#     app.state.exit_stack = AsyncExitStack()
+#     await app.state.exit_stack.__aenter__()
+
+#     app.state.agent = build_agent()
+#     app.state.local_tools = app.state.agent.local_tools
+#     app.state.mcp_tools = app.state.agent.mcp_tools
+#     await app.state.mcp_tools.connect_mcp(app.state.exit_stack)
+
+# @app.on_event("shutdown")
+# async def shutdown_event():
+#     if hasattr(app.state, "exit_stack"):
+#         await app.state.exit_stack.__aexit__(None, None, None)
 
 
 class Turn:

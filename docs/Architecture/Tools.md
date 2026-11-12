@@ -38,6 +38,8 @@ These actions operate against the project workspace and a memory file. The class
 - lists exposed tools and stores them under a session registry
 - exposes `schemas()` so the model sees them alongside local tools
 
+`mock_server.py` starts those servers once, from the FastAPI `lifespan`, before it accepts requests. The same lifespan closes their sessions when the process stops. They are not opened per chat turn.
+
 This gives the runtime a combined tool surface without hard-coding each external tool.
 
 ## Runtime flow

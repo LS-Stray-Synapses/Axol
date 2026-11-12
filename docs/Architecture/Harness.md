@@ -32,6 +32,8 @@ flowchart LR
     E --> UI[React UI]
 ```
 
+Before it serves requests, the FastAPI `lifespan` in `mock_server.py` builds the agent and connects the MCP servers. Those sessions close when the process stops.
+
 The flow is straightforward:
 
 1. `mock_server.py` receives a user message.

@@ -155,14 +155,11 @@ function send(event: ClientEvent): boolean {
   return true;
 }
 
-// ...existing code...
-
-export function sendMessage(payload: {
-  type: "user_message";
-  text: string;
-  model: string;
-}): boolean {
-  return send(payload);
+export function sendMessage(text: string): boolean {
+  return send({ type: "user_message", text });
+}
+export function changeModel(model: string): boolean {
+  return send({ type: "model_change", model });
 }
 
 export function replyApproval(id: string, approved: boolean): boolean {

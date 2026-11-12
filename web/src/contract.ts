@@ -31,7 +31,8 @@ export type EventOf<T extends ServerEventType> = Extract<ServerEvent, { type: T 
 // ---------------------------------------------------------------- browser → server
 
 export type ClientEvent =
-  | { type: "user_message"; text: string; model: string }
+  | { type: "user_message"; text: string;}
+  | { type: "model_change"; model: string }
   | { type: "approval_reply"; id: string; approved: boolean }
   | { type: "cancel" }
   | { type: "call_operation"; request_id: string; name: string; args: Record<string, unknown> }

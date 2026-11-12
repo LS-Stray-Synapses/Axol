@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Slot } from "../slots";
-import { setSelectedModel, useStore } from "../store";
-import { stopTurn, submitUserMessage } from "../wiring";
+import { useStore } from "../store";
+import { selectModel, stopTurn, submitUserMessage } from "../wiring";
 
 export function Composer() {
   const running = useStore((s) => s.running);
@@ -24,7 +24,7 @@ export function Composer() {
   }, [disabled]);
 
   function send() {
-    if (submitUserMessage(text, selectedModel)) setText("");
+    if (submitUserMessage(text)) setText("");
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -41,7 +41,7 @@ export function Composer() {
 
         <select
           value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
+          onChange={(e) => selectModel(e.target.value)}
           className="h-10 rounded-md border border-border bg-bg px-2 text-sm"
           aria-label="Model"
         >

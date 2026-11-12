@@ -101,11 +101,11 @@ export function App() {
   const activeTab = tabs[activeIndex] ?? { kind: "chat" as const };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       <Header />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
           {tabs.length > 1 && (
             <div className="flex shrink-0 border-b border-border bg-bg/40">
               {tabs.map((tab, index) => (
@@ -124,10 +124,10 @@ export function App() {
             </div>
           )}
 
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab.kind === "chat" ? (
               <>
-                <div className="min-h-0 flex-1">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ChatView />
                 </div>
                 <Composer />

@@ -41,6 +41,12 @@ This means the architecture currently targets the OpenAI-compatible API shape th
 - tool-aware LLM calls using function-calling schemas
 - model selection via a simple registry (`self.models`)
 
+The browser does not send the model with each prompt. On connect the server sends `model_list`. Choosing another entry in the composer sends `model_change` with the registry key, and `mock_server.py` writes that key to `agent.model_name`. The next turn uses it here:
+
+```python
+cfg = self.models[self.model_name]
+```
+
 The mock server binds the current prototype to local models such as:
 
 - `local` → `qwen3.5:4b`

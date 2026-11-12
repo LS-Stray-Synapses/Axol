@@ -2,9 +2,9 @@
 // main.tsx so tests and harnessDebug can use the exact same wiring.
 
 import { addApproval, clearApprovals } from "./approvals";
-import { cancel, connect, onConnectionChange, onEvent, sendMessage } from "./backend";
+import { cancel, changeModel, connect, onConnectionChange, onEvent, sendMessage } from "./backend";
 import { loadPlugin, unloadPlugin } from "./plugins";
-import { addUserMessage, applyServerEvent, markCancelRequested, setConnectionState, useStore } from "./store";
+import { addUserMessage, applyServerEvent, markCancelRequested, setConnectionState, setSelectedModel, useStore } from "./store";
 
 export function wire(): () => void {
   const offEvent = onEvent((e) => {
@@ -42,26 +42,18 @@ export function startConnection(): void {
 }
 
 /** What the composer (and harnessDebug.runScenario) calls. */
-export function submitUserMessage(text: string, model: string): boolean {
+export function submitUserMessage(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || useStore.getState().running) return false;
-
-  const payload: {
-    type: "user_message";
-    text: string;
-    model: string;
-  } = {
-    type: "user_message",
-    text: trimmed,
-    model,
-  };
-
-  if (!sendMessage(payload)) return false;
-
+  if (!sendMessage(trimmed)) return false;
   addUserMessage(trimmed);
   return true;
 }
-
+export function selectModel(model: string): void {
+  if (!model || model === useStore.getState().selectedModel) return;
+  if (!changeModel(model)) return;
+  setSelectedModel(model);
+}
 
 export function stopTurn(): void {
   markCancelRequested();

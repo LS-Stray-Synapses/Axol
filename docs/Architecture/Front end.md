@@ -55,11 +55,16 @@ The contract is defined in `web/src/contract.ts` and includes both server→brow
 
 | `type` | fields | purpose |
 |---|---|---|
-| `user_message` | `text`, `model` | send a user prompt |
+| `user_message` | `text` | send a user prompt |
+| `model_change` | `model` | switch the active model |
 | `approval_reply` | `id`, `approved` | approve or deny a tool action |
 | `cancel` | — | cancel running turn |
 | `call_operation` | `request_id`, `name`, `args` | request a UI/server operation |
 | `plugin_error` | `name`, `slot`, `error` | plugin crash report |
+
+`model` on `model_change` is a registry key (`local`, `local-small`), the same `name` the server put in `model_list`. It is not the display label.
+
+The dropdown sends `model_change` only when the selection changes. A later `user_message` does not repeat the model. The server stores the choice on `agent.model_name`, and the next turn reads that field when it opens the model client. Picking the model that is already active is a no-op. An unknown name is ignored.
 
 ## 3. Example turn flow
 
@@ -70,6 +75,9 @@ sequenceDiagram
     participant M as Model backend
     participant T as Tool
 
+    UI->>H: model_change {model: "local-small"}
+    Note over UI,H: only when the dropdown selection changes
+    Note over H: agent.model_name updated
     UI->>H: user_message {text}
     H-->>UI: status {state: "running"}
     H->>M: message + tool schemas
@@ -97,7 +105,8 @@ The real harness should follow this same lifecycle. The mock server already demo
 5. `thinking` and `text` are incremental deltas, not whole-message rewrites.
 6. Only one turn can run per WebSocket connection at a time.
 7. `plugin_loaded.ui_url` must live under `/plugins/` on the same origin.
-8. Long-running work must not block the socket loop; user actions like `cancel` and `approval_reply` must still be processed.
+8. Long-running work must not block the socket loop; user actions like `cancel`, `approval_reply`, and `model_change` must still be processed.
+9. The active model changes only through `model_change`. `user_message` carries the prompt text and nothing else.
 
 ## 5. How it matches the code today
 

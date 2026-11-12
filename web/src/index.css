@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
 /* Theme tokens. Plain CSS variables (--h-*) are the real source: plugins use
    them via harness.theme, and the approval dialog's shadow DOM inherits them.
    The @theme block below just maps them onto Tailwind utility names, so
@@ -44,12 +55,6 @@
   --color-ok: var(--h-ok);
   --font-sans: var(--h-font);
   --font-mono: var(--h-mono);
-}
-
-html,
-body,
-#root {
-  height: 100%;
 }
 
 body {

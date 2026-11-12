@@ -439,16 +439,18 @@ async def ws_endpoint(ws: WebSocket):
             kind = msg.get("type") if isinstance(msg, dict) else None
 
             if kind == "user_message":
-                selected_model = str(msg.get("model") or app.state.agent.model_name)
-
-                if selected_model in app.state.agent.models:
-                    app.state.agent.model_name = selected_model
-                    print(f"[model switch] {selected_model} -> {app.state.agent.models[selected_model].model}")
-
                 if t.task and not t.task.done():
                     continue  # one turn at a time; the UI disables input anyway
                 t.task = asyncio.create_task(run_turn(t, str(msg.get("text", ""))))
 
+            elif kind == "model_change":
+                selected_model_name = str(msg.get("model"))
+                if selected_model_name in app.state.agent.models:
+                    previous_model = app.state.agent.model_name
+                    if previous_model != selected_model_name:
+                        app.state.agent.model_name = selected_model_name
+                        print(f"[model switch] {previous_model} -> {app.state.agent.models[selected_model_name].model}")
+                        
             elif kind == "approval_reply":
                 future = t.approvals.get(msg.get("id"))
                 if future and not future.done():

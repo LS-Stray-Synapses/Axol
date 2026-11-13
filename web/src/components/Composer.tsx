@@ -49,7 +49,7 @@ export function Composer() {
             (
               models.map((model: { name: string; label: string }) => (
                 <option key={model.name} value={model.name}>
-                  {model.label}
+                  {model.name}
                 </option>
             ))
           )}

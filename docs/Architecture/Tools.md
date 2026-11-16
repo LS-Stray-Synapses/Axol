@@ -26,7 +26,7 @@ The repo contains two concrete tool providers:
 These actions operate against the project workspace and a memory file. The class also provides:
 
 - `tool_registry()` — callable functions by tool name
-- `tool_schemas()` — OpenAI-compatible function definitions for model/tool calling
+- `tool_schemas()` — function definitions accepted by Ollama's tool-calling API
 
 ### 2. MCP tools
 
@@ -56,18 +56,17 @@ flowchart LR
 The actual agent routing is in `modules/agent.py`:
 
 - `all_tool_schemas()` merges local and MCP tool definitions
-- `call_tool()` resolves a tool name and invokes the matching local handler or MCP session
+- `call_tool()` resolves a tool name and invokes the matching local handler or MCP session; local handlers may be synchronous or asynchronous
 - results are appended back into the model message history
 
 ## Current contract
 
-Tool calls are represented as OpenAI-compatible function calls with fields like:
+Ollama streams tool calls with a function `name` and `arguments`. The agent collects those calls, assigns each one a UUID for the browser event pair, and emits:
 
-- `name`
-- `arguments` (JSON payload)
-- `tool_call_id`
+- `tool_call` with `id`, `name`, and parsed `args`
+- `tool_result` with the same `id`, `name`, result, and error flag
 
-This is the structure the mock server and browser front end already understand.
+The result is also appended to Ollama's conversation history with the tool name so the model can continue the turn.
 
 ## Design status
 

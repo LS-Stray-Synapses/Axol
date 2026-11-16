@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
 class ModelConfig(BaseModel):
-    base_url: str
+    host: str
     api_key: str = "none"
     model: str

@@ -7,7 +7,7 @@ tags: [component]
 
 ## Purpose
 
-The Adaptation Loop is the part of Axol that watches how a model behaves and adjusts the harness composition accordingly. It is still a planned architecture component, but the current prototype already gives it the raw data it will need: tool-call traces, approval flows, errors, model outputs, and memory usage.
+The Adaptation Loop is the part of Axol that watches how a model behaves and adjusts the harness composition accordingly. It is still a planned architecture component, but the current prototype already provides streamed thinking and text, tool-call traces, errors, and memory usage. Approval events remain part of the browser contract but are not yet emitted by the live agent path.
 
 ## Current starting point
 

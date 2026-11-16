@@ -1,5 +1,7 @@
-from openai import AsyncOpenAI
+from ollama import AsyncClient
 import json
+import uuid
+import inspect
 
 class Agent():
     def __init__(self, local_tools, mcp_tools, model_name: str, models: dict, messages: list[dict] | None = None):
@@ -15,58 +17,80 @@ class Agent():
     async def call_tool(self, name: str, args: dict) -> str:
         local_registry = self.local_tools.tool_registry()
         if name in local_registry:
-            return local_registry[name](**args)
+            result = local_registry[name](**args)
+
+            if inspect.isawaitable(result):
+                result = await result
+                
+            return str(result)
         if name in self.mcp_tools.sessions:
             result = await  self.mcp_tools.sessions[name].call_tool(name, args)
             return "\n".join(c.text for c in result.content if hasattr(c, "text"))
         return f"error: unknown tool {name}"
 
-    async def run_agent(self, user_message: str) -> str:
+    async def run_agent(self, user_message: str):
         cfg = self.models[self.model_name]
-        client = AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
-
+        client = AsyncClient(host=cfg.host)
         self.messages.append({"role": "user", "content": user_message})
+
         while True:
-            response = await client.chat.completions.create(
-                model= cfg.model, messages=self.messages, tools=self.all_tool_schemas()
+            thinking = ""
+            content = ""
+            tool_calls = []
+
+            stream = await client.chat(
+                model= cfg.model, 
+                messages=self.messages, 
+                tools=self.all_tool_schemas(),
+                think=True,
+                stream=True
             )
-            message = response.choices[0].message or ""
-            if not message.tool_calls:
-                self.messages.append({"role": "assistant", "content": message.content})
-                return message.content
-        
-            self.messages.append(message)
-            for call in message.tool_calls:
-                args = json.loads(call.function.arguments or "{}")
-                print(f"   [tool]{call.function.name}({args})")
-                result = await self.call_tool(call.function.name, args)
+
+            async for chunk in stream:
+                # Thinking
+                if chunk.message.thinking:
+                    thinking += chunk.message.thinking
+                    yield {"type": "thinking", "text": chunk.message.thinking}
+
+                # Answer
+                if chunk.message.content:
+                    content += chunk.message.content
+                    yield {"type": "text", "text": chunk.message.content}
+
+                # Tool Calls
+                if chunk.message.tool_calls:
+                    tool_calls.extend(chunk.message.tool_calls)
+
+            self.messages.append({"role": "assistant", "thinking": thinking, "content": content, "tool_calls": tool_calls})
+             
+            # No tools requested: finish
+            if not tool_calls:
+                yield {"type": "done"}
+                return
+
+            # Execute requested tools
+            for call in tool_calls:
+                name = call.function.name or ""
+                args = call.function.arguments or {}
+
+                if isinstance(args, str):
+                    args = json.loads(args)
+
+                call_id = str(uuid.uuid4())
+
+                yield {"type": "tool_call", "id": call_id, "name": name, "args": args}
+
+                try:
+                    result = await self.call_tool(name, args)
+                    is_error = False
+                except Exception as error:
+                    result = str(error)
+                    is_error = True
+
+                # Save result for Ollama   
                 self.messages.append(
-                    {"role": "tool", "tool_call_id": call.id, "content": result}
+                    {"role": "tool",  "tool_name": name, "content": str(result)}
                 )
-                
-    def handle_commands(self, line: str) -> bool:
-        if not line.startswith("/"):
-            return False
-        cmd, _, arg =line.partition(" ")
-        if cmd =="/models":
-            for name, cfg in self.models.items():
-                marker = "*" if name == self.model_name else " "
-                print(f" {marker} {name:<12} {cfg.model}  ({cfg.base_url})")
-        elif cmd == "/model":
-            if arg in self.models:
-                self.model_name = arg
-                print(f"   switched to {arg} ({self.models[arg].model})")
-            else:
-                print(f"   unknown model '{arg}' - try /models")
-        elif cmd == "/tools":
-            for schema in self.all_tool_schemas():
-                fn = schema["function"]
-                origin = "local" if fn["name"] in self.local_tools.tool_schemas() else "mcp"
-                print(f"   [{origin}] {fn['name']}: ({fn['description'][:60]})")
-        elif cmd =="/memory":
-            print(self.local_tools.load_memory())
-        elif cmd =="/quit":
-            raise SystemExit
-        else:
-            print(f"   commands: /models /model <name> /tools /memory /quit")
-        return True
+
+                # Send result to frontend
+                yield {"type": "tool_result", "id": call_id, "name": name, "result": str(result), "is_error": is_error}

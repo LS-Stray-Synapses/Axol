@@ -2,19 +2,19 @@
 
 **A self-adapting agent architecture with a live prototype harness and web UI.**
 
-Axol is a model-agnostic agent architecture built around a harness that can adapt to the model it is running. The project is no longer only a design document: the repo includes a working mock backend, a browser client, and a real tool/model integration pattern that matches the intended runtime architecture.
+Axol is a model-agnostic agent architecture built around a harness that can adapt to the model it is running. The project is no longer only a design document: the repo includes a working prototype backend, a browser client, and a real tool/model integration pattern that matches the intended runtime architecture.
 
-> ⚠️ **Status: prototype in progress.** The system is implemented as a working mock-driven architecture with a live UI, not a finished production harness yet.
+> ⚠️ **Status: prototype in progress.** The system has a working Ollama-driven agent loop and live UI, but is not a finished production harness yet.
 
 ---
 
 ## What is implemented now
 
 - **Web UI** in `web/` with a structured event protocol defined in `web/src/contract.ts`
-- **Mock harness backend** in `mock_server.py` that produces the same server→browser event stream the final harness should produce
+- **Prototype harness backend** in `mock_server.py` that forwards the agent's stream through the server→browser event contract
 - **Local workspace tools** in `modules/local_tools.py` for file reading/writing and memory persistence
 - **MCP tool integration** in `modules/mcp_tools.py` for external tool servers described in `mcp_server.json`
-- **Model abstraction** in `modules/models.py` and `modules/agent.py` using OpenAI-compatible model configs and tool execution
+- **Model abstraction** in `modules/models.py` and `modules/agent.py` using Ollama's native streaming client and tool execution
 - **Plugin runtime patterns** in the browser and server for loading UI plugins from `plugins/`
 
 ## Why Axol?
@@ -43,21 +43,21 @@ Most agent frameworks are tuned for one model or provider, and switching models 
 │   └──────────────────────┬────────────────┘ │
 │                          │                  │
 │   ┌──────────────────────▼────────────────┐ │
-│   │     Mock harness / runtime adapter     │ │
-│   │  agent loop, tool calls, approvals,   │ │
-│   │   plugin & scenario orchestration      │ │
+│   │   Prototype harness / runtime adapter  │ │
+│   │ thinking/text stream, agent loop and  │ │
+│   │      tool + plugin orchestration       │ │
 │   └───────────────┬────────────────────────┘ │
 │                   │                          │
 │   ┌───────────────▼────────────────┐        │
 │   │  Local tools + MCP tools +     │        │
-│   │  model config / OpenAI client  │        │
+│   │  model config / Ollama client  │        │
 │   └────────────────────────────────┘        │
 └─────────────────────────────────────────────┘
 ```
 
 - **Web UI** – React-based front end that listens for harness events and renders them as thinking, text, tool calls and approvals.
-- **Mock harness** – `mock_server.py` acts as the prototype runtime, emitting the event contract the final server should adopt.
-- **Model interface** – `ModelConfig` + `AsyncOpenAI` setup provides an OpenAI-compatible adapter for local or hosted backends.
+- **Prototype harness** – `mock_server.py` runs agent turns and forwards their events through the contract the final server should adopt.
+- **Model interface** – `ModelConfig` + Ollama `AsyncClient` provides streamed thinking, text, and tool calls from local Ollama models.
 - **Tool layer** – `LocalTools` and `MCPTools` expose both workspace utilities and external MCP-capable tools.
 
 ## Roadmap / status
@@ -65,7 +65,7 @@ Most agent frameworks are tuned for one model or provider, and switching models 
 - [x] Browser event contract and mock runtime
 - [x] Local workspace tools and memory
 - [x] MCP tool connection pattern
-- [x] OpenAI-compatible model adapter
+- [x] Native Ollama streaming model adapter
 - [x] UI plugin loading model
 - [ ] Production harness runtime kernel
 - [ ] Real adaptation loop + evaluation pipeline
@@ -77,9 +77,9 @@ Axol was inspired by the harness design behind **DeepSeek**.
 
 ## Getting started
 
-The web UI is built and runs against a **mock backend** while the real harness is still being implemented. To see how the two sides talk, read [docs/Architecture/Front end.md](docs/Architecture/Front%20end.md).
+The web UI runs against the **prototype backend** while the production harness is still being implemented. To see how the two sides talk, read [docs/Architecture/Front end.md](docs/Architecture/Front%20end.md).
 
-**Prerequisites:** Python ≥ 3.11 and Node.js ≥ 22 (`node -v`).
+**Prerequisites:** Python ≥ 3.11, Node.js ≥ 22 (`node -v`), and Ollama with one of the models configured in `mock_server.py`.
 
 ```bash
 git clone https://github.com/LS-Stray-Synapses/Axol.git && cd Axol
@@ -95,11 +95,11 @@ cd web && npm ci && cd ..
 **Run it** (two terminals, both from the repo root):
 
 ```bash
-.venv/bin/uvicorn mock_server:app --port 8000 --reload   # fake harness
+.venv/bin/uvicorn mock_server:app --port 8000 --reload   # prototype harness
 cd web && npm run dev                                     # UI → http://localhost:5173
 ```
 
-Type `/scenario tools` (or `approval`, `error`, `cancel`, …) in the chat to play a scripted scenario.
+Select an available Ollama model in the composer and send a message. Thinking, answer text, tool calls, and tool results stream through the browser event contract.
 
 **Checks** (from `web/`): `npm run typecheck`, `npm test` (unit), `npm run e2e` (end-to-end; first time: `npx playwright install chromium`).
 
@@ -108,7 +108,7 @@ Type `/scenario tools` (or `approval`, `error`, `cancel`, …) in the chat to pl
 ```text
 web/              React + TypeScript UI   (web/src/contract.ts = the event contract)
 plugins/          UI plugins the server can load at runtime (plain JS, no build)
-mock_server.py    fake back end with scripted scenarios
+mock_server.py    prototype FastAPI/WebSocket runtime adapter
 modules/          Python tool + model + agent runtime layer
 docs/             design notes (Obsidian vault)
 requirements.txt  pinned Python deps

@@ -19,7 +19,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from modules import LocalTools, MCPTools, ModelConfig, Agent
-import os
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -33,17 +32,17 @@ DIST_DIR = ROOT / "web" / "dist"
 
 MODELS: dict[str, ModelConfig] = {
     "bonsai-2:27b": ModelConfig(
-        base_url="http://localhost:11434/v1",
+        host="http://localhost:11434",
         api_key="ollama",
         model="bonsai-2:27b"
     ),
     "qwen3.5:4b": ModelConfig(
-        base_url="http://localhost:11434/v1",
+       host="http://localhost:11434",
         api_key="ollama",
         model="qwen3.5:4b"
     ),
     "qwen3.5:2b": ModelConfig(
-        base_url="http://localhost:11434/v1",
+        host="http://localhost:11434",
         api_key="ollama",
         model="qwen3.5:2b"
     )
@@ -342,22 +341,18 @@ def pick_scenario(text: str):
 
 
 async def run_turn(t: Turn, text: str) -> None:
-    """Wrap a scenario in status events, and handle cancel/crash like a real server must."""
+    """Run an agent turn and forward its events to the frontend."""
     await t.send({"type": "status", "state": "running"})
     try:
-        # await pick_scenario(text)(t, text)
         agent = app.state.agent
-        reply = await agent.run_agent(text)
-        await t.stream("text", str(reply), chunk=8, delay=0.2)
-        await t.send({"type": "done"})
+        async for event in agent.run_agent(text):
+            await t.send(event)
     except asyncio.CancelledError:
-        # Cancelled by the user. The turn still ends cleanly with `done`.
-        # (suppress: if the socket itself went away, there's nobody to tell.)
         with contextlib.suppress(Exception):
             await t.send({"type": "done"})
-    except Exception as e:  # a bug in a scenario shouldn't kill the socket
+    except Exception as e:
         with contextlib.suppress(Exception):
-            await t.send({"type": "error", "message": f"mock server bug: {e!r}"})
+            await t.send({"type": "error", "message": f"Agent error: {e!r}"})
     finally:
         with contextlib.suppress(Exception):
             await t.send({"type": "status", "state": "idle"})

@@ -4,7 +4,7 @@ tags: [architecture]
 ---
 # Architecture overview
 
-Axol is a model-agnostic agent architecture that mixes a working prototype runtime with the longer-term goal of adaptation, evaluation, and model creation. The repo already contains a live browser client, a mock harness backend, and the core Python tool/model layer that the future runtime will build on.
+Axol is a model-agnostic agent architecture that mixes a working prototype runtime with the longer-term goal of adaptation, evaluation, and model creation. The repo already contains a live browser client, a prototype harness backend, and the core Python tool/model layer that the future runtime will build on.
 
 It is inspired by the ideas in [DeepSeek Harness](../Research/DeepSeek%20harness.md) and the plugin-kernel pattern described in [ADR-0002](../Decisions/ADR-0002-plugin-kernel-runtime.md).
 
@@ -21,7 +21,7 @@ flowchart TB
         Mock[mock_server.py]
         Agent[Agent loop]
         Tools[Local + MCP tools]
-        Models[ModelConfig + OpenAI-compatible adapters]
+        Models[ModelConfig + Ollama client]
     end
 
     UI --> Contract
@@ -36,10 +36,10 @@ flowchart TB
 This is the implementation that exists today:
 
 - browser UI + socket contract
-- mock harness for scripted scenarios
+- FastAPI/WebSocket adapter for the prototype agent
 - local workspace tool layer
 - MCP tool discovery and execution
-- simple model registry and OpenAI-compatible calls
+- simple model registry and native Ollama streaming
 
 ## Three-layer roadmap
 
@@ -75,7 +75,7 @@ sequenceDiagram
 | Component | Note | Status |
 |-----------|------|--------|
 | Runtime / agent loop | `mock_server.py` + `modules/agent.py` | prototype |
-| Model abstraction | `modules/models.py` + OpenAI-compatible config | active |
+| Model abstraction | `modules/models.py` + Ollama client config | active |
 | Memory & context | `modules/local_tools.py` + `memory.md` | active |
 | Tool system | `modules/local_tools.py` + `modules/mcp_tools.py` | active |
 | Web UI & protocol | `web/` + `web/src/contract.ts` | active |

@@ -11,7 +11,7 @@ The current Harness is a working prototype runtime built around an agent loop, t
 
 The current implementation lives primarily in:
 
-- `mock_server.py` — mock server and scenario engine
+- `mock_server.py` — FastAPI/WebSocket runtime adapter
 - `modules/agent.py` — agent loop + tool routing
 - `modules/local_tools.py` — workspace and memory tools
 - `modules/mcp_tools.py` — MCP tool discovery and session handling
@@ -23,7 +23,7 @@ The current implementation lives primarily in:
 flowchart LR
     U[User message] --> S[WebSocket /ws]
     S --> A[Agent.run_agent]
-    A --> M[ModelConfig + AsyncOpenAI client]
+    A --> M[ModelConfig + Ollama AsyncClient]
     A --> LT[LocalTools]
     A --> MT[MCPTools]
     LT --> WS[Workspace + memory]
@@ -37,9 +37,10 @@ Before it serves requests, the FastAPI `lifespan` in `mock_server.py` builds the
 The flow is straightforward:
 
 1. `mock_server.py` receives a user message.
-2. A per-connection `Turn` tracks the running scenario, approvals, and plugin state.
-3. The agent builds a prompt, calls the model with tool schemas, and executes tool calls when returned.
-4. The mock server emits the same `thinking`, `tool_call`, `tool_result`, `approval_request`, and `done` events the browser expects.
+2. A per-connection `Turn` tracks the running task, approvals, and plugin state.
+3. The agent streams from Ollama with thinking enabled and yields `thinking` and `text` deltas.
+4. When the model requests tools, the agent executes them, yields matching `tool_call` and `tool_result` events, and continues the model loop.
+5. The mock server forwards every yielded event to the browser and wraps the turn with running/idle status.
 
 ## What exists today
 
@@ -48,19 +49,18 @@ The flow is straightforward:
 `modules/agent.py` already implements:
 
 - `all_tool_schemas()` for combined local + MCP tool registration
-- `call_tool()` to route by tool name
-- `run_agent()` to call the model and continue until no more tool calls are needed
-- command handling like `/models`, `/model`, `/tools`, and `/memory`
+- `call_tool()` to route synchronous or asynchronous local tools and MCP tools by name
+- `run_agent()` as an async event stream that continues until no more tool calls are needed
 
 ### Runtime model layer
 
 `modules/models.py` defines `ModelConfig` with:
 
-- `base_url`
+- `host`
 - `api_key`
 - `model`
 
-This is the current version of the model interface: a single OpenAI-compatible schema that can represent local or hosted model endpoints.
+This is the current version of the model interface: an Ollama host plus the registered model name. `modules/agent.py` uses Ollama's native `AsyncClient`.
 
 ### Tool layer
 
@@ -76,11 +76,10 @@ Together they provide an immediate tool registry that the model can use and the 
 The prototype already does the expected core actions:
 
 - stream chat text as deltas
+- stream model thinking as deltas
 - emit tool calls and results
-- request approval before risky actions
 - surface errors cleanly
 - handle message cancelation and plugin loading
-- script scenarios like `tools`, `approval`, `error`, and `plugin`
 
 ## Remaining work
 

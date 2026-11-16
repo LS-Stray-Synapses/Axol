@@ -7,7 +7,7 @@ tags: [component]
 
 ## Purpose
 
-The current model interface is intentionally simple and OpenAI-compatible. It allows the runtime to switch between local and remote model endpoints without revising the rest of the agent loop.
+The current model interface is intentionally simple and uses Ollama's native async client. It allows the runtime to switch between models registered on an Ollama host without revising the rest of the agent loop.
 
 ## Current implementation
 
@@ -15,7 +15,7 @@ The interface is defined in `modules/models.py` as `ModelConfig`:
 
 ```python
 class ModelConfig(BaseModel):
-    base_url: str
+    host: str
     api_key: str = "none"
     model: str
 ```
@@ -24,20 +24,22 @@ This is then used by `modules/agent.py`:
 
 ```python
 cfg = self.models[self.model_name]
-client = AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
-response = await client.chat.completions.create(
+client = AsyncClient(host=cfg.host)
+stream = await client.chat(
     model=cfg.model,
     messages=self.messages,
     tools=self.all_tool_schemas(),
+    think=True,
+    stream=True,
 )
 ```
 
-This means the architecture currently targets the OpenAI-compatible API shape that local runtimes like Ollama expose via `/v1`.
+`run_agent()` consumes this stream directly. It emits `thinking` and `text` deltas as they arrive, collects tool calls, executes them, adds their results to the conversation, and continues until the model returns without another tool call.
 
 ## What it supports
 
-- local OpenAI-compatible endpoints
-- remote hosted model APIs with the same interface
+- local Ollama hosts
+- streamed reasoning and answer text
 - tool-aware LLM calls using function-calling schemas
 - model selection via a simple registry (`self.models`)
 
@@ -47,19 +49,20 @@ The browser does not send the model with each prompt. On connect the server send
 cfg = self.models[self.model_name]
 ```
 
-The mock server binds the current prototype to local models such as:
+The mock server currently registers local Ollama models such as:
 
-- `local` → `qwen3.5:4b`
-- `local-small` → `qwen3.5:2b`
+- `bonsai-2:27b`
+- `qwen3.5:4b`
+- `qwen3.5:2b`
 
 ## Runtime flow
 
 ```mermaid
 flowchart LR
     Agent[Agent] --> Config[ModelConfig]
-    Config --> Client[AsyncOpenAI client]
-    Client --> Model[Local or remote endpoint]
-    Model --> Response[Chat completion + tool calls]
+    Config --> Client[Ollama AsyncClient]
+    Client --> Model[Ollama host]
+    Model --> Response[Thinking, text + tool calls]
     Response --> Agent
 ```
 

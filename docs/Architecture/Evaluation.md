@@ -7,7 +7,7 @@ tags: [component]
 
 ## Purpose
 
-Evaluation is how Axol scores runs, compares harness versions, and creates benchmark cases from real behavior. This is still a planned system, but the project is already producing the raw inputs it needs: tool calls, model outputs, errors, and scenario traces.
+Evaluation is how Axol scores runs, compares harness versions, and creates benchmark cases from real behavior. This is still a planned system, but the project is already producing core inputs: streamed model thinking and text, tool calls and results, and errors.
 
 ## Current starting point
 
@@ -15,15 +15,13 @@ The prototype already emits enough structured events to evaluate behavior:
 
 - `thinking` and `text` events show how the agent is reasoning and responding
 - `tool_call` and `tool_result` show operational correctness
-- `error` and `approval_request` capture failure and approval flows
-- `done` provides completion markers and usage metadata
+- `error` captures turn failures
+- `done` provides completion markers
 
-That is enough to start building metrics such as:
+The contract reserves `approval_request` and optional usage metadata, but the current agent path does not emit them yet. The implemented events are enough to start building metrics such as:
 
 - success vs. failure
 - tool error rate
-- approval override rate
-- token / latency cost
 - prompt or output format failures
 
 ## Future design

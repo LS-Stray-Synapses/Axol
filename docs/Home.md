@@ -12,7 +12,7 @@ This folder is an [Obsidian](https://obsidian.md) vault. Open `docs/` as a vault
 The repo is no longer only a concept document. It currently includes:
 
 - a working React web UI in `web/`
-- a mock harness backend in `mock_server.py`
+- a prototype harness backend in `mock_server.py`
 - model + tool layers in `modules/`
 - local memory persistence via `memory.md`
 - MCP tool integration via `mcp_server.json`

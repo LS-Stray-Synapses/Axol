@@ -7,7 +7,7 @@ tags: [component]
 
 ## Purpose
 
-The long-term design is for Axol to record raw runs and curate them into valuable experiences: model behaviour, failure modes, successful trajectories, and benchmark candidates. That pipeline is still a future architecture goal, but the repo already has the basic ingredients for it: tool calls, memory, model calls, and the mock scenario stream.
+The long-term design is for Axol to record raw runs and curate them into valuable experiences: model behaviour, failure modes, successful trajectories, and benchmark candidates. That pipeline is still a future architecture goal, but the repo already has the basic ingredients for it: tool calls, memory, model calls, and the structured agent event stream.
 
 ## Current foundation
 

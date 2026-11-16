@@ -5,7 +5,7 @@ tags: [component, guide]
 ---
 # Front end ↔ Harness: how they talk
 
-This document reflects the implemented prototype. The browser UI in `web/` is already connected to a mock backend in `mock_server.py`, and both sides follow the event contract in `web/src/contract.ts`.
+This document reflects the implemented prototype. The browser UI in `web/` is connected to the prototype backend in `mock_server.py`, and both sides follow the event contract in `web/src/contract.ts`.
 
 > **Source of truth:** `web/src/contract.ts`. If this note and that file disagree, the file wins.
 
@@ -25,10 +25,10 @@ flowchart LR
     B <-- "JSON events" --> WS
     UI -. "import() plugin ui.js" .-> P
     H --> Tools[Local tools + MCP tools]
-    H --> Models[Model config / OpenAI-compatible backend]
+    H --> Models[Model config / Ollama]
 ```
 
-The Python side is currently `mock_server.py`, which plays scripted scenarios while the real harness runtime is still being built. The browser cannot tell the difference between a mock and a production server because the  protocol is the real interface.
+The Python side is currently `mock_server.py`. It runs the prototype agent and forwards the agent's native Ollama stream to the browser. The browser remains independent of the model provider because the WebSocket protocol is the interface.
 
 ## 2. Contract shape
 
@@ -62,7 +62,7 @@ The contract is defined in `web/src/contract.ts` and includes both server→brow
 | `call_operation` | `request_id`, `name`, `args` | request a UI/server operation |
 | `plugin_error` | `name`, `slot`, `error` | plugin crash report |
 
-`model` on `model_change` is a registry key (`local`, `local-small`), the same `name` the server put in `model_list`. It is not the display label.
+`model` on `model_change` is a registry key (for example `qwen3.5:4b`), the same `name` the server put in `model_list`. It is not the display label.
 
 The dropdown sends `model_change` only when the selection changes. A later `user_message` does not repeat the model. The server stores the choice on `agent.model_name`, and the next turn reads that field when it opens the model client. Picking the model that is already active is a no-op. An unknown name is ignored.
 
@@ -75,7 +75,7 @@ sequenceDiagram
     participant M as Model backend
     participant T as Tool
 
-    UI->>H: model_change {model: "local-small"}
+    UI->>H: model_change {model: "qwen3.5:2b"}
     Note over UI,H: only when the dropdown selection changes
     Note over H: agent.model_name updated
     UI->>H: user_message {text}
@@ -84,17 +84,15 @@ sequenceDiagram
     M-->>H: stream / tool call
     H-->>UI: thinking {text: "I should…"}
     H-->>UI: tool_call {id: "c1", name: "read_file", args: {...}}
-    H-->>UI: approval_request {id: "c1", ...}
-    UI->>H: approval_reply {id: "c1", approved: true}
     H->>T: execute tool
     T-->>H: result
     H-->>UI: tool_result {id: "c1", ...}
     H-->>UI: text {text: "Here is the answer…"}
-    H-->>UI: done {usage: {...}}
+    H-->>UI: done
     H-->>UI: status {state: "idle"}
 ```
 
-The real harness should follow this same lifecycle. The mock server already demonstrates the exact pattern for `thinking`, `tool_call`, `tool_result`, `approval_request`, `error`, `cancel`, and `done`.
+The current agent path implements `thinking`, `text`, `tool_call`, `tool_result`, `error`, `cancel`, and `done`. The protocol also defines approval and optional usage events, but the real agent path does not emit them yet.
 
 ## 4. Rules the harness must keep
 
@@ -112,8 +110,8 @@ The real harness should follow this same lifecycle. The mock server already demo
 
 The current implementation already includes the important parts:
 
-- `mock_server.py` creates `Turn` objects and streams scenario events as the harness would
-- `modules/agent.py` manages model calls and tool dispatch
+- `mock_server.py` creates `Turn` objects and forwards agent events over the WebSocket
+- `modules/agent.py` streams Ollama thinking/text and manages tool dispatch
 - `modules/local_tools.py` and `modules/mcp_tools.py` define the actual tool providers
 - `web/src/contract.ts` enforces runtime validation for every browser/server event
 
@@ -122,13 +120,13 @@ This is the prototype contract the real server should aim to satisfy.
 ## 6. Try it yourself
 
 ```bash
-# terminal 1: fake harness
+# terminal 1: prototype harness
 .venv/bin/uvicorn mock_server:app --port 8000 --reload
 
 # terminal 2: UI
 cd web && npm run dev
 ```
 
-Then open `http://localhost:5173` and use `/scenario` commands like `basic`, `tools`, `approval`, `error`, `cancel`, `plugin`, `plugin_crash`, and `plugin_healthy`.
+Then open `http://localhost:5173`, select an Ollama model, and send a message. Model thinking, answer text, tool calls, and tool results are forwarded as contract events.
 
 Back to [Overview](Overview.md)

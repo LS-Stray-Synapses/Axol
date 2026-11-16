@@ -25,10 +25,10 @@ flowchart LR
     B <-- "JSON events" --> WS
     UI -. "import() plugin ui.js" .-> P
     H --> Tools[Local tools + MCP tools]
-    H --> Models[Model config / Ollama]
+    H --> Models[OpenAI-compatible local models]
 ```
 
-The Python side is currently `mock_server.py`. It runs the prototype agent and forwards the agent's native Ollama stream to the browser. The browser remains independent of the model provider because the WebSocket protocol is the interface.
+The Python side is currently `mock_server.py`. It runs the prototype agent and forwards an OpenAI-compatible model stream to the browser. The agent normalizes provider-specific reasoning fields, so the browser remains independent of whether a local model runs through llama.cpp, Ollama, or another compatible server.
 
 ## 2. Contract shape
 
@@ -111,7 +111,7 @@ The current agent path implements `thinking`, `text`, `tool_call`, `tool_result`
 The current implementation already includes the important parts:
 
 - `mock_server.py` creates `Turn` objects and forwards agent events over the WebSocket
-- `modules/agent.py` streams Ollama thinking/text and manages tool dispatch
+- `modules/agent.py` normalizes and streams thinking/text from OpenAI-compatible providers and manages tool dispatch
 - `modules/local_tools.py` and `modules/mcp_tools.py` define the actual tool providers
 - `web/src/contract.ts` enforces runtime validation for every browser/server event
 
@@ -127,6 +127,6 @@ This is the prototype contract the real server should aim to satisfy.
 cd web && npm run dev
 ```
 
-Then open `http://localhost:5173`, select an Ollama model, and send a message. Model thinking, answer text, tool calls, and tool results are forwarded as contract events.
+Then open `http://localhost:5173`, select a configured model, and send a message. Model thinking, answer text, tool calls, and tool results are forwarded as contract events.
 
 Back to [Overview](Overview.md)

@@ -32,17 +32,16 @@ DIST_DIR = ROOT / "web" / "dist"
 
 MODELS: dict[str, ModelConfig] = {
     "bonsai-2:27b": ModelConfig(
-        host="http://localhost:11434",
-        api_key="ollama",
+        host="http://localhost:8080/v1",
         model="bonsai-2:27b"
     ),
     "qwen3.5:4b": ModelConfig(
-       host="http://localhost:11434",
+       host="http://localhost:11434/v1",
         api_key="ollama",
         model="qwen3.5:4b"
     ),
     "qwen3.5:2b": ModelConfig(
-        host="http://localhost:11434",
+        host="http://localhost:11434/v1",
         api_key="ollama",
         model="qwen3.5:2b"
     )

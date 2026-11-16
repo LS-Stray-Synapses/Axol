@@ -1,4 +1,4 @@
-from ollama import AsyncClient
+from openai import AsyncOpenAI
 import json
 import uuid
 import inspect
@@ -30,40 +30,73 @@ class Agent():
 
     async def run_agent(self, user_message: str):
         cfg = self.models[self.model_name]
-        client = AsyncClient(host=cfg.host)
+        client = AsyncOpenAI(base_url=cfg.host, api_key=cfg.api_key)
         self.messages.append({"role": "user", "content": user_message})
 
         try:
             while True:
                 thinking = ""
                 content = ""
-                tool_calls = []
+                tool_calls = {}
 
-                stream = await client.chat(
-                    model= cfg.model, 
-                    messages=self.messages, 
+                stream = await client.chat.completions.create(
+                    model=cfg.model,
+                    messages=self.messages,
                     tools=self.all_tool_schemas(),
-                    think=True,
-                    stream=True
+                    stream=True,
+                    reasoning_effort="xhigh"
                 )
 
                 async for chunk in stream:
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
                     # Thinking
-                    if chunk.message.thinking:
-                        thinking += chunk.message.thinking
-                        yield {"type": "thinking", "text": chunk.message.thinking}
-
+                    reasoning = (getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None))
+                    if reasoning:
+                        thinking += reasoning
+                        yield {"type": "thinking", "text": reasoning}
                     # Answer
-                    if chunk.message.content:
-                        content += chunk.message.content
-                        yield {"type": "text", "text": chunk.message.content}
-
+                    if delta.content:
+                        content += delta.content
+                        yield {"type": "text", "text": delta.content}
                     # Tool Calls
-                    if chunk.message.tool_calls:
-                        tool_calls.extend(chunk.message.tool_calls)
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            index = tc.index
+                            if index not in tool_calls:
+                                tool_calls[index] = {
+                                    "id": "",
+                                    "name": "",
+                                    "arguments": ""
+                                }
+                            if tc.id:
+                                tool_calls[index]["id"] = tc.id
+                            if tc.function.name:
+                                tool_calls[index]["name"] += tc.function.name
+                            if tc.function.arguments:
+                                tool_calls[index]["arguments"] += tc.function.arguments
 
-                self.messages.append({"role": "assistant", "thinking": thinking, "content": content, "tool_calls": tool_calls})
-                
+                # Reconstruct complete tool calls
+                tool_calls = [tool_calls[i] for i in sorted(tool_calls)]
+
+                # Save assistant message in OpenAI format
+                assistant_message = {"role": "assistant", "content": content or None}
+                if tool_calls:
+                    assistant_message["tool_calls"] = [
+                        {
+                            "id": call["id"],
+                            "type": "function",
+                            "function": {
+                                "name": call["name"],
+                                "arguments": call["arguments"]
+                            }
+                        }
+                        for call in tool_calls
+                    ]
+
+                self.messages.append(assistant_message)
+
                 # No tools requested: finish
                 if not tool_calls:
                     yield {"type": "done"}
@@ -71,15 +104,12 @@ class Agent():
 
                 # Execute requested tools
                 for call in tool_calls:
-                    name = call.function.name or ""
-                    args = call.function.arguments or {}
+                    name = call["name"]
+                    args = json.loads(call["arguments"] or "{}")
+                    model_call_id = call["id"]
+                    frontend_id = str(uuid.uuid4())
 
-                    if isinstance(args, str):
-                        args = json.loads(args)
-
-                    call_id = str(uuid.uuid4())
-
-                    yield {"type": "tool_call", "id": call_id, "name": name, "args": args}
+                    yield {"type": "tool_call", "id": frontend_id, "name": name, "args": args}
 
                     try:
                         result = await self.call_tool(name, args)
@@ -88,12 +118,11 @@ class Agent():
                         result = str(error)
                         is_error = True
 
-                    # Save result for Ollama   
-                    self.messages.append(
-                        {"role": "tool",  "tool_name": name, "content": str(result)}
-                    )
+                    # Save result for llama.cpp (OpenAI format)
+                    self.messages.append({"role": "tool", "tool_call_id": model_call_id, "content": str(result)})
 
                     # Send result to frontend
-                    yield {"type": "tool_result", "id": call_id, "name": name, "result": str(result), "is_error": is_error}
+                    yield {"type": "tool_result", "id": frontend_id, "name": name, "result": str(result), "is_error": is_error}
+
         finally:
             await client.close()

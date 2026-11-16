@@ -21,7 +21,7 @@ flowchart TB
         Mock[mock_server.py]
         Agent[Agent loop]
         Tools[Local + MCP tools]
-        Models[ModelConfig + Ollama client]
+        Models[ModelConfig + OpenAI-compatible adapter]
     end
 
     UI --> Contract
@@ -39,7 +39,7 @@ This is the implementation that exists today:
 - FastAPI/WebSocket adapter for the prototype agent
 - local workspace tool layer
 - MCP tool discovery and execution
-- simple model registry and native Ollama streaming
+- simple model registry and OpenAI-compatible streaming across local backends
 
 ## Three-layer roadmap
 
@@ -75,7 +75,7 @@ sequenceDiagram
 | Component | Note | Status |
 |-----------|------|--------|
 | Runtime / agent loop | `mock_server.py` + `modules/agent.py` | prototype |
-| Model abstraction | `modules/models.py` + Ollama client config | active |
+| Model abstraction | `modules/models.py` + OpenAI-compatible config | active |
 | Memory & context | `modules/local_tools.py` + `memory.md` | active |
 | Tool system | `modules/local_tools.py` + `modules/mcp_tools.py` | active |
 | Web UI & protocol | `web/` + `web/src/contract.ts` | active |

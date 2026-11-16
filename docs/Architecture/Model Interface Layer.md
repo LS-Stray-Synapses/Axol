@@ -7,7 +7,7 @@ tags: [component]
 
 ## Purpose
 
-The current model interface is intentionally simple and uses Ollama's native async client. It allows the runtime to switch between models registered on an Ollama host without revising the rest of the agent loop.
+The current model interface uses the OpenAI-compatible API through `AsyncOpenAI`. This lets the same agent loop stream from different local model servers, including llama.cpp and Ollama, as long as they expose an OpenAI-compatible `/v1` endpoint.
 
 ## Current implementation
 
@@ -24,21 +24,28 @@ This is then used by `modules/agent.py`:
 
 ```python
 cfg = self.models[self.model_name]
-client = AsyncClient(host=cfg.host)
-stream = await client.chat(
+client = AsyncOpenAI(base_url=cfg.host, api_key=cfg.api_key)
+stream = await client.chat.completions.create(
     model=cfg.model,
     messages=self.messages,
     tools=self.all_tool_schemas(),
-    think=True,
     stream=True,
+    reasoning_effort="xhigh",
 )
 ```
 
-`run_agent()` consumes this stream directly. It emits `thinking` and `text` deltas as they arrive, collects tool calls, executes them, adds their results to the conversation, and continues until the model returns without another tool call.
+`run_agent()` consumes this stream directly. It emits `thinking` and `text` deltas as they arrive, reconstructs streamed tool calls, executes them, adds their results to the conversation in OpenAI format, and continues until the model returns without another tool call.
+
+Reasoning fields are not uniform across compatible servers. The adapter accepts both fields currently observed in the supported local backends:
+
+- `reasoning_content` from llama.cpp
+- `reasoning` from Ollama's OpenAI-compatible endpoint
+
+Either field is normalized into the frontend's `thinking` event.
 
 ## What it supports
 
-- local Ollama hosts
+- OpenAI-compatible local endpoints, including llama.cpp and Ollama
 - streamed reasoning and answer text
 - tool-aware LLM calls using function-calling schemas
 - model selection via a simple registry (`self.models`)
@@ -49,19 +56,18 @@ The browser does not send the model with each prompt. On connect the server send
 cfg = self.models[self.model_name]
 ```
 
-The mock server currently registers local Ollama models such as:
+The mock server currently registers models served by different local backends:
 
-- `bonsai-2:27b`
-- `qwen3.5:4b`
-- `qwen3.5:2b`
+- `bonsai-2:27b` through llama.cpp at `localhost:8080/v1`
+- `qwen3.5:4b` and `qwen3.5:2b` through Ollama at `localhost:11434/v1`
 
 ## Runtime flow
 
 ```mermaid
 flowchart LR
     Agent[Agent] --> Config[ModelConfig]
-    Config --> Client[Ollama AsyncClient]
-    Client --> Model[Ollama host]
+    Config --> Client[AsyncOpenAI]
+    Client --> Model[OpenAI-compatible local endpoint]
     Model --> Response[Thinking, text + tool calls]
     Response --> Agent
 ```

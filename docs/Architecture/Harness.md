@@ -23,7 +23,7 @@ The current implementation lives primarily in:
 flowchart LR
     U[User message] --> S[WebSocket /ws]
     S --> A[Agent.run_agent]
-    A --> M[ModelConfig + Ollama AsyncClient]
+    A --> M[ModelConfig + AsyncOpenAI]
     A --> LT[LocalTools]
     A --> MT[MCPTools]
     LT --> WS[Workspace + memory]
@@ -38,7 +38,7 @@ The flow is straightforward:
 
 1. `mock_server.py` receives a user message.
 2. A per-connection `Turn` tracks the running task, approvals, and plugin state.
-3. The agent streams from Ollama with thinking enabled and yields `thinking` and `text` deltas.
+3. The agent streams from an OpenAI-compatible local endpoint and yields `thinking` and `text` deltas. It normalizes llama.cpp's `reasoning_content` and Ollama's `reasoning` field into the same thinking event.
 4. When the model requests tools, the agent executes them, yields matching `tool_call` and `tool_result` events, and continues the model loop.
 5. The mock server forwards every yielded event to the browser and wraps the turn with running/idle status.
 
@@ -60,7 +60,7 @@ The flow is straightforward:
 - `api_key`
 - `model`
 
-This is the current version of the model interface: an Ollama host plus the registered model name. `modules/agent.py` uses Ollama's native `AsyncClient`.
+This is the current version of the model interface: an OpenAI-compatible base URL, API key, and model name. `modules/agent.py` uses `AsyncOpenAI`, so different local servers can share the same agent loop.
 
 ### Tool layer
 

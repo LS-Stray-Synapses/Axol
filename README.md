@@ -4,7 +4,7 @@
 
 Axol is a model-agnostic agent architecture built around a harness that can adapt to the model it is running. The project is no longer only a design document: the repo includes a working prototype backend, a browser client, and a real tool/model integration pattern that matches the intended runtime architecture.
 
-> ⚠️ **Status: prototype in progress.** The system has a working Ollama-driven agent loop and live UI, but is not a finished production harness yet.
+> ⚠️ **Status: prototype in progress.** The system has a working OpenAI-compatible streaming agent loop and live UI, but is not a finished production harness yet.
 
 ---
 
@@ -14,7 +14,7 @@ Axol is a model-agnostic agent architecture built around a harness that can adap
 - **Prototype harness backend** in `mock_server.py` that forwards the agent's stream through the server→browser event contract
 - **Local workspace tools** in `modules/local_tools.py` for file reading/writing and memory persistence
 - **MCP tool integration** in `modules/mcp_tools.py` for external tool servers described in `mcp_server.json`
-- **Model abstraction** in `modules/models.py` and `modules/agent.py` using Ollama's native streaming client and tool execution
+- **Model abstraction** in `modules/models.py` and `modules/agent.py` using an OpenAI-compatible streaming client across local backends
 - **Plugin runtime patterns** in the browser and server for loading UI plugins from `plugins/`
 
 ## Why Axol?
@@ -50,14 +50,14 @@ Most agent frameworks are tuned for one model or provider, and switching models 
 │                   │                          │
 │   ┌───────────────▼────────────────┐        │
 │   │  Local tools + MCP tools +     │        │
-│   │  model config / Ollama client  │        │
+│   │ model config / OpenAI client   │        │
 │   └────────────────────────────────┘        │
 └─────────────────────────────────────────────┘
 ```
 
 - **Web UI** – React-based front end that listens for harness events and renders them as thinking, text, tool calls and approvals.
 - **Prototype harness** – `mock_server.py` runs agent turns and forwards their events through the contract the final server should adopt.
-- **Model interface** – `ModelConfig` + Ollama `AsyncClient` provides streamed thinking, text, and tool calls from local Ollama models.
+- **Model interface** – `ModelConfig` + `AsyncOpenAI` streams thinking, text, and tool calls from local OpenAI-compatible servers. It normalizes llama.cpp's `reasoning_content` and Ollama's `reasoning` into one frontend event.
 - **Tool layer** – `LocalTools` and `MCPTools` expose both workspace utilities and external MCP-capable tools.
 
 ## Roadmap / status
@@ -65,7 +65,7 @@ Most agent frameworks are tuned for one model or provider, and switching models 
 - [x] Browser event contract and mock runtime
 - [x] Local workspace tools and memory
 - [x] MCP tool connection pattern
-- [x] Native Ollama streaming model adapter
+- [x] OpenAI-compatible streaming model adapter
 - [x] UI plugin loading model
 - [ ] Production harness runtime kernel
 - [ ] Real adaptation loop + evaluation pipeline
@@ -79,7 +79,7 @@ Axol was inspired by the harness design behind **DeepSeek**.
 
 The web UI runs against the **prototype backend** while the production harness is still being implemented. To see how the two sides talk, read [docs/Architecture/Front end.md](docs/Architecture/Front%20end.md).
 
-**Prerequisites:** Python ≥ 3.11, Node.js ≥ 22 (`node -v`), and Ollama with one of the models configured in `mock_server.py`.
+**Prerequisites:** Python ≥ 3.11, Node.js ≥ 22 (`node -v`), and an OpenAI-compatible local model server configured in `mock_server.py` (for example llama.cpp or Ollama).
 
 ```bash
 git clone https://github.com/LS-Stray-Synapses/Axol.git && cd Axol
@@ -99,7 +99,7 @@ cd web && npm ci && cd ..
 cd web && npm run dev                                     # UI → http://localhost:5173
 ```
 
-Select an available Ollama model in the composer and send a message. Thinking, answer text, tool calls, and tool results stream through the browser event contract.
+Select an available model in the composer and send a message. Thinking, answer text, tool calls, and tool results stream through the browser event contract.
 
 **Checks** (from `web/`): `npm run typecheck`, `npm test` (unit), `npm run e2e` (end-to-end; first time: `npx playwright install chromium`).
 

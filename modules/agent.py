@@ -33,64 +33,67 @@ class Agent():
         client = AsyncClient(host=cfg.host)
         self.messages.append({"role": "user", "content": user_message})
 
-        while True:
-            thinking = ""
-            content = ""
-            tool_calls = []
+        try:
+            while True:
+                thinking = ""
+                content = ""
+                tool_calls = []
 
-            stream = await client.chat(
-                model= cfg.model, 
-                messages=self.messages, 
-                tools=self.all_tool_schemas(),
-                think=True,
-                stream=True
-            )
-
-            async for chunk in stream:
-                # Thinking
-                if chunk.message.thinking:
-                    thinking += chunk.message.thinking
-                    yield {"type": "thinking", "text": chunk.message.thinking}
-
-                # Answer
-                if chunk.message.content:
-                    content += chunk.message.content
-                    yield {"type": "text", "text": chunk.message.content}
-
-                # Tool Calls
-                if chunk.message.tool_calls:
-                    tool_calls.extend(chunk.message.tool_calls)
-
-            self.messages.append({"role": "assistant", "thinking": thinking, "content": content, "tool_calls": tool_calls})
-             
-            # No tools requested: finish
-            if not tool_calls:
-                yield {"type": "done"}
-                return
-
-            # Execute requested tools
-            for call in tool_calls:
-                name = call.function.name or ""
-                args = call.function.arguments or {}
-
-                if isinstance(args, str):
-                    args = json.loads(args)
-
-                call_id = str(uuid.uuid4())
-
-                yield {"type": "tool_call", "id": call_id, "name": name, "args": args}
-
-                try:
-                    result = await self.call_tool(name, args)
-                    is_error = False
-                except Exception as error:
-                    result = str(error)
-                    is_error = True
-
-                # Save result for Ollama   
-                self.messages.append(
-                    {"role": "tool",  "tool_name": name, "content": str(result)}
+                stream = await client.chat(
+                    model= cfg.model, 
+                    messages=self.messages, 
+                    tools=self.all_tool_schemas(),
+                    think=True,
+                    stream=True
                 )
 
-                # Send result to frontend
-                yield {"type": "tool_result", "id": call_id, "name": name, "result": str(result), "is_error": is_error}
+                async for chunk in stream:
+                    # Thinking
+                    if chunk.message.thinking:
+                        thinking += chunk.message.thinking
+                        yield {"type": "thinking", "text": chunk.message.thinking}
+
+                    # Answer
+                    if chunk.message.content:
+                        content += chunk.message.content
+                        yield {"type": "text", "text": chunk.message.content}
+
+                    # Tool Calls
+                    if chunk.message.tool_calls:
+                        tool_calls.extend(chunk.message.tool_calls)
+
+                self.messages.append({"role": "assistant", "thinking": thinking, "content": content, "tool_calls": tool_calls})
+                
+                # No tools requested: finish
+                if not tool_calls:
+                    yield {"type": "done"}
+                    return
+
+                # Execute requested tools
+                for call in tool_calls:
+                    name = call.function.name or ""
+                    args = call.function.arguments or {}
+
+                    if isinstance(args, str):
+                        args = json.loads(args)
+
+                    call_id = str(uuid.uuid4())
+
+                    yield {"type": "tool_call", "id": call_id, "name": name, "args": args}
+
+                    try:
+                        result = await self.call_tool(name, args)
+                        is_error = False
+                    except Exception as error:
+                        result = str(error)
+                        is_error = True
+
+                    # Save result for Ollama   
+                    self.messages.append(
+                        {"role": "tool",  "tool_name": name, "content": str(result)}
+                    )
+
+                    # Send result to frontend
+                    yield {"type": "tool_result", "id": call_id, "name": name, "result": str(result), "is_error": is_error}
+        finally:
+            await client.close()

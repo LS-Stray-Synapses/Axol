@@ -92,9 +92,21 @@ python3 -m venv .venv
 cd web && npm ci && cd ..
 ```
 
-**Run it** (two terminals, both from the repo root):
-
+**Download Bonsai**
 ```bash
+hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-Q2_0.gguf --local-dir ~/Models/Bonsai-27B
+```
+
+**Run it** (three terminals, both from the repo root):
+```bash
+llama-server \                                          # llama.cpp launch 
+    -m ~/Models/Bonsai-27B/Ternary-Bonsai-2-27B-Q2_0.gguf \
+    --host 127.0.0.1 \
+    --port 8080 \
+    -ngl 99 \
+    -c 8192 \
+    --jinja \
+    --alias bonsai-2:27b
 .venv/bin/uvicorn mock_server:app --port 8000 --reload   # prototype harness
 cd web && npm run dev                                     # UI → http://localhost:5173
 ```

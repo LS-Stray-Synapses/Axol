@@ -99,7 +99,8 @@ hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-Q2_0.gguf --
 
 **Run it** (three terminals, both from the repo root):
 ```bash
-llama-server \                                          # llama.cpp launch 
+# llama.cpp launch 
+llama-server \
     -m ~/Models/Bonsai-27B/Ternary-Bonsai-2-27B-Q2_0.gguf \
     --host 127.0.0.1 \
     --port 8080 \

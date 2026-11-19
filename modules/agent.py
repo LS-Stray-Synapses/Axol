@@ -28,10 +28,14 @@ class Agent():
             return "\n".join(c.text for c in result.content if hasattr(c, "text"))
         return f"error: unknown tool {name}"
 
-    async def run_agent(self, user_message: str):
+    async def run_agent(self, user_message: str, messages: list[dict] | None = None):
+        """Run one turn. `messages` is the conversation's history (system prompt
+        first); it is appended to in place. Without it, the shared self.messages
+        is used, as before conversations existed."""
+        history = messages if messages is not None else self.messages
         cfg = self.models[self.model_name]
         client = AsyncOpenAI(base_url=cfg.host, api_key=cfg.api_key)
-        self.messages.append({"role": "user", "content": user_message})
+        history.append({"role": "user", "content": user_message})
 
         try:
             while True:
@@ -41,7 +45,7 @@ class Agent():
 
                 stream = await client.chat.completions.create(
                     model=cfg.model,
-                    messages=self.messages,
+                    messages=history,
                     tools=self.all_tool_schemas(),
                     stream=True,
                     reasoning_effort="xhigh"
@@ -95,7 +99,7 @@ class Agent():
                         for call in tool_calls
                     ]
 
-                self.messages.append(assistant_message)
+                history.append(assistant_message)
 
                 # No tools requested: finish
                 if not tool_calls:
@@ -119,7 +123,7 @@ class Agent():
                         is_error = True
 
                     # Save result for llama.cpp (OpenAI format)
-                    self.messages.append({"role": "tool", "tool_call_id": model_call_id, "content": str(result)})
+                    history.append({"role": "tool", "tool_call_id": model_call_id, "content": str(result)})
 
                     # Send result to frontend
                     yield {"type": "tool_result", "id": frontend_id, "name": name, "result": str(result), "is_error": is_error}

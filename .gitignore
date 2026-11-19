@@ -25,3 +25,6 @@ web/playwright-report/
 
 # Local secrets (API keys go here, never in code)
 .env
+
+# Per-conversation model history (mock_server.py → modules/sessions.py)
+sessions/

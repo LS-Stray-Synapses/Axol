@@ -19,6 +19,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from modules import LocalTools, MCPTools, ModelConfig, Agent
+from modules.sessions import SessionStore
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -29,6 +30,7 @@ MEMORY_FILE = ROOT / "memory.md"
 MCP_CONFIG = ROOT / "mcp_server.json"
 PLUGINS_DIR = ROOT / "plugins"
 DIST_DIR = ROOT / "web" / "dist"
+SESSIONS = SessionStore(ROOT / "sessions")  # one model history per conversation
 
 MODELS: dict[str, ModelConfig] = {
     "bonsai-2:27b": ModelConfig(
@@ -339,12 +341,27 @@ def pick_scenario(text: str):
     return basic
 
 
-async def run_turn(t: Turn, text: str) -> None:
-    """Run an agent turn and forward its events to the frontend."""
+async def run_turn(t: Turn, text: str, conversation_id: str | None = None) -> None:
+    """Run an agent turn and forward its events to the frontend.
+
+    With a conversation_id, the model sees only that conversation's history
+    (from sessions/<id>.jsonl) and what the turn adds is appended to it, even
+    if the turn is cancelled or fails part-way. Without one, the old shared
+    history is used.
+    """
     await t.send({"type": "status", "state": "running"})
+    history: list[dict] | None = None
+    logged = 0
     try:
         agent = app.state.agent
-        async for event in agent.run_agent(text):
+        if conversation_id is not None:
+            if not SESSIONS.valid(conversation_id):
+                raise ValueError(f"invalid conversation id {conversation_id!r}")
+            # Fresh system prompt each turn, so memory saved in any chat reaches every chat.
+            system = {"role": "system", "content": SYSTEM_PROMPT.format(memory=app.state.local_tools.load_memory())}
+            history = [system, *SESSIONS.load(conversation_id)]
+            logged = len(history)
+        async for event in agent.run_agent(text, history):
             await t.send(event)
     except asyncio.CancelledError:
         with contextlib.suppress(Exception):
@@ -353,6 +370,11 @@ async def run_turn(t: Turn, text: str) -> None:
         with contextlib.suppress(Exception):
             await t.send({"type": "error", "message": f"Agent error: {e!r}"})
     finally:
+        if history is not None and conversation_id is not None:
+            try:
+                SESSIONS.append(conversation_id, history[logged:])
+            except Exception as e:
+                print(f"  [sessions] could not save {conversation_id}: {e!r}")
         with contextlib.suppress(Exception):
             await t.send({"type": "status", "state": "idle"})
 
@@ -416,6 +438,9 @@ async def operation(t: Turn, name: str, args: dict):
         await t.unload_plugin(str(args.get("name")))
         return True
 
+    if name == "sessions.delete":
+        return SESSIONS.delete(str(args.get("id", "")))
+
     if name == "debug.fail":
         raise RuntimeError("this operation always fails (on purpose)")
 
@@ -457,7 +482,10 @@ async def ws_endpoint(ws: WebSocket):
             if kind == "user_message":
                 if t.task and not t.task.done():
                     continue  # one turn at a time; the UI disables input anyway
-                t.task = asyncio.create_task(run_turn(t, str(msg.get("text", ""))))
+                cid = msg.get("conversation_id")
+                t.task = asyncio.create_task(
+                    run_turn(t, str(msg.get("text", "")), cid if isinstance(cid, str) else None)
+                )
 
             elif kind == "model_change":
                 selected_model_name = str(msg.get("model"))

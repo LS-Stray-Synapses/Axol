@@ -104,7 +104,7 @@ The current agent path implements `thinking`, `text`, `tool_call`, `tool_result`
 6. Only one turn can run per WebSocket connection at a time.
 7. `plugin_loaded.ui_url` must live under `/plugins/` on the same origin.
 8. Long-running work must not block the socket loop; user actions like `cancel`, `approval_reply`, and `model_change` must still be processed.
-9. The active model changes only through `model_change`. `user_message` carries the prompt text and nothing else.
+9. The active model changes only through `model_change`. `user_message` carries the prompt text and the `conversation_id` it belongs to (optional; without it the server uses one shared history). See [ADR-0004](../Decisions/ADR-0004-per-conversation-sessions.md).
 
 ## 5. How it matches the code today
 
@@ -116,6 +116,18 @@ The current implementation already includes the important parts:
 - `web/src/contract.ts` enforces runtime validation for every browser/server event
 
 This is the prototype contract the real server should aim to satisfy.
+
+### Conversations and speed stats
+
+The UI keeps the *presentation* of conversations (titles, folders, rendered turns, speed stats) **in the browser**. The server keeps what the *model* saw, per conversation ([ADR-0004](../Decisions/ADR-0004-per-conversation-sessions.md)):
+
+- `web/src/conversations.ts` stores chats and folders in `localStorage` (`axol.conversations.v1`). The chat store (`store.ts`) remains the live view of *one* chat; a subscription copies its messages into the active conversation, and switching loads another conversation back in. Switching is blocked while a turn runs.
+- `web/src/metrics.ts` timestamps `thinking`/`text`/`tool_*` events as they arrive and attaches `stats` (tok/s, tokens, thinking tokens, time to first token, duration, tool calls, model) to each finished assistant message. Tokens are counted deltas (llama.cpp and Ollama stream about one token each) unless `done.usage` is sent. Tok/s counts only time spent streaming, not tool or approval time.
+- Chat order is **manual**: each chat has an `order` within its folder. New chats go on top, dragging places a chat exactly where the drop line shows, and new messages don't reorder anything. Several chats can be selected (Ctrl/⌘+click, Shift+click, or ☑) and moved or deleted together.
+- The UI pieces are the **Chats** sidebar tab, the bar above the chat (title, folder, totals), the stats line under each answer, and the live readout in the header.
+
+> [!info] One model history per conversation
+> Each `user_message` carries `conversation_id`; the server runs the turn on `sessions/<id>.jsonl` and appends to it (`modules/sessions.py`). Long-term memory (`memory.md`) is still shared by all chats. Details and trade-offs: [ADR-0004](../Decisions/ADR-0004-per-conversation-sessions.md).
 
 ## 6. Try it yourself
 

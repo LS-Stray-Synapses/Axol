@@ -3,6 +3,8 @@
 
 import { addApproval, clearApprovals } from "./approvals";
 import { cancel, changeModel, connect, onConnectionChange, onEvent, sendMessage } from "./backend";
+import { titleFromFirstMessage, useConversations } from "./conversations";
+import { abandonTurn, beginTurn, track } from "./metrics";
 import { loadPlugin, unloadPlugin } from "./plugins";
 import { addUserMessage, applyServerEvent, markCancelRequested, setConnectionState, setSelectedModel, useStore } from "./store";
 
@@ -21,13 +23,19 @@ export function wire(): () => void {
       default:
         applyServerEvent(e);
     }
+    // After the store has the event queued, so a finished turn's stats land
+    // on its message. Timestamps are taken here, at arrival, not at render.
+    track(e);
     // A turn that ended can't still be waiting for a yes/no.
     if ((e.type === "status" && e.state === "idle") || e.type === "done" || e.type === "error") clearApprovals();
   });
 
   const offConn = onConnectionChange((s) => {
     setConnectionState(s);
-    if (s !== "open") clearApprovals();
+    if (s !== "open") {
+      clearApprovals();
+      abandonTurn();
+    }
   });
 
   return () => {
@@ -45,8 +53,10 @@ export function startConnection(): void {
 export function submitUserMessage(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || useStore.getState().running) return false;
-  if (!sendMessage(trimmed)) return false;
+  if (!sendMessage(trimmed, useConversations.getState().activeId || undefined)) return false;
   addUserMessage(trimmed);
+  titleFromFirstMessage(trimmed);
+  beginTurn(useStore.getState().selectedModel || undefined);
   return true;
 }
 export function selectModel(model: string): void {

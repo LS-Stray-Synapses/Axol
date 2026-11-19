@@ -324,12 +324,12 @@ test("many tabs + header entries: one scrolling row, ▾ / ⋯ menus, state kept
 
   // Tabs: a single row (same vertical position), not wrapped.
   const tops = await page.locator('[role="tablist"] [role="tab"]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
-  expect(tops).toHaveLength(15); // 3 built-ins + 12
+  expect(tops).toHaveLength(17); // 5 built-ins (Chats, Memory, Tools, Workspace, Plugins) + 12
   expect(new Set(tops).size).toBe(1);
 
   // ▾ menu lists every tab; picking one activates it and scrolls it into view.
   await page.getByTestId("tab-menu").getByRole("button").click();
-  await expect(page.getByRole("menuitem")).toHaveCount(15);
+  await expect(page.getByRole("menuitem")).toHaveCount(17);
   await page.getByRole("menuitem", { name: "Tab number 12" }).click();
   await expect(page.locator('[data-counter="t12"]')).toBeVisible();
   await expect(page.locator('[data-tab="t12"]')).toBeInViewport();
@@ -396,4 +396,49 @@ test("Plugins tab: lists plugins/ and loads / unloads them", async ({ page }) =>
   await expect(row.locator("[data-plugin-status]")).toHaveText("not loaded");
   await expect(page.locator('[data-tab="example"]')).toHaveCount(0);
   expect(Object.keys((await state(page)).plugins)).toEqual(["healthy-tab"]);
+});
+
+test("chats: new chat, folders, drag to folder, stats line, survives reload", async ({ page }) => {
+  await open(page);
+  const inject = (e: object) => page.evaluate((ev) => window.harnessDebug!.inject(ev), e);
+  // A fake turn, injected (no model needed).
+  async function fakeTurn() {
+    await inject({ type: "status", state: "running" });
+    for (let i = 0; i < 20; i++) {
+      await inject({ type: "text", text: "tok " });
+      await page.waitForTimeout(15);
+    }
+    await inject({ type: "done" });
+    await inject({ type: "status", state: "idle" });
+  }
+
+  await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveText("Chats");
+  await page.locator("[data-composer]").fill("first chat");
+  await page.keyboard.press("Enter");
+  await fakeTurn();
+  await expect(page.locator("[data-conversation-title]")).toHaveText("first chat");
+  // Format only: if a model is running, its real reply streams into this turn too (exact counting is unit-tested).
+  await expect(page.locator('[data-turn-stats] [data-stat="tokens"]').first()).toHaveText(/^≈\d+ tok$/);
+  await expect(page.locator('[data-turn-stats] [data-stat="tps"]').first()).toContainText("tok/s");
+
+  await page.locator("[data-new-folder]").click();
+  await page.keyboard.type("Research");
+  await page.keyboard.press("Enter");
+  await page.locator("[data-new-chat]").click();
+  await expect(page.locator("[data-message-id]")).toHaveCount(0);
+  await page.locator("[data-composer]").fill("second chat");
+  await page.keyboard.press("Enter");
+  await fakeTurn();
+
+  await page.locator("[data-conversation][data-active]").dragTo(page.locator('section[data-folder]:has-text("Research")'));
+  await expect(page.locator("[data-conversation-bar]")).toContainText("Research");
+
+  await page.reload();
+  await page.waitForFunction(() => window.harnessDebug?.getState().connection === "open");
+  await expect(page.locator("[data-conversation]")).toHaveCount(2);
+  await expect(page.locator("[data-conversation-title]")).toHaveText("second chat");
+  await expect(page.locator("[data-turn-stats]")).toHaveCount(1);
+
+  await page.locator('[data-conversation] button:has-text("first chat")').click();
+  await expect(page.locator('[data-role="user"]')).toHaveText("first chat");
 });

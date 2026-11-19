@@ -75,6 +75,11 @@ describe("backend", () => {
     expect(seen).toEqual(["done"]);
   });
 
+  it("sends the conversation id with a message when there is one", () => {
+    backend.sendMessage("hi", "c-1");
+    expect(latest().sent).toEqual([{ type: "user_message", text: "hi", conversation_id: "c-1" }]);
+  });
+
   it("sends the contract's browser→server events", () => {
     backend.sendMessage("hello");
     backend.replyApproval("a1", true);

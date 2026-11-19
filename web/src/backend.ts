@@ -155,8 +155,8 @@ function send(event: ClientEvent): boolean {
   return true;
 }
 
-export function sendMessage(text: string): boolean {
-  return send({ type: "user_message", text });
+export function sendMessage(text: string, conversationId?: string): boolean {
+  return send(conversationId ? { type: "user_message", text, conversation_id: conversationId } : { type: "user_message", text });
 }
 export function changeModel(model: string): boolean {
   return send({ type: "model_change", model });

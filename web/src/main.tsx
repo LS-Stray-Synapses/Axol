@@ -2,12 +2,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { registerBuiltins } from "./builtin";
+import { initConversations } from "./conversations";
 import { startConnection, wire } from "./wiring";
 import "./index.css";
 
 // Order matters a little: subscribe before connecting, so not even the first
 // event can slip past the store.
 wire();
+initConversations(); // before connecting: restore the last chat first
 registerBuiltins();
 startConnection();
 

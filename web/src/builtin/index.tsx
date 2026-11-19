@@ -5,6 +5,7 @@
 import { useState } from "react";
 import type { Undo } from "../../plugin-api";
 import { register } from "../slots";
+import { ChatsTab } from "./ChatsTab";
 import { MemoryTab } from "./MemoryTab";
 import { PluginsTab } from "./PluginsTab";
 import { ToolsTab } from "./ToolsTab";
@@ -27,6 +28,7 @@ function ThemeToggle() {
 
 export function registerBuiltins(): Undo {
   const undos = [
+    register("sidebar.tabs", { id: "chats", title: "Chats", order: 0, render: ChatsTab }),
     register("sidebar.tabs", { id: "workspace", title: "Workspace", order: 25, render: WorkspaceTab }),
     register("sidebar.tabs", { id: "memory", title: "Memory", order: 10, render: MemoryTab }),
     register("sidebar.tabs", { id: "tools", title: "Tools", order: 20, render: ToolsTab }),

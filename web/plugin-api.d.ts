@@ -59,6 +59,34 @@ export interface ChatMessage {
   usage?: Usage;
   /** the user pressed Stop during this turn */
   stopped?: boolean;
+  /** timing for a finished assistant turn, measured in the browser (see src/metrics.ts) */
+  stats?: TurnStats;
+}
+
+/**
+ * How fast a turn streamed. The back end doesn't report timing, so the
+ * browser measures it as events arrive. Local servers (llama.cpp, Ollama)
+ * stream about one token per delta, so when `usage` is missing the token
+ * count is the number of streamed deltas and `estimated` is true.
+ */
+export interface TurnStats {
+  /** model selected when the turn started */
+  model?: string;
+  /** when the turn started (ms since epoch) */
+  startedAt: number;
+  /** output tokens: from `usage` if the server sent it, else counted deltas */
+  outputTokens: number;
+  /** of those, deltas that were thinking (always counted, never reported) */
+  thinkingTokens: number;
+  /** true when outputTokens was counted from stream deltas, not reported */
+  estimated: boolean;
+  /** tokens per second while the model was actually streaming (tool time excluded) */
+  tokensPerSecond?: number;
+  /** send → first thinking/text delta */
+  ttftMs?: number;
+  /** send → end of turn, wall clock */
+  durationMs: number;
+  toolCalls: number;
 }
 
 export interface PluginInfo {

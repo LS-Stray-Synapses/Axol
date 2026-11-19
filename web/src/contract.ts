@@ -31,7 +31,8 @@ export type EventOf<T extends ServerEventType> = Extract<ServerEvent, { type: T 
 // ---------------------------------------------------------------- browser → server
 
 export type ClientEvent =
-  | { type: "user_message"; text: string;}
+  /** conversation_id: which conversation's history the server should run the turn in */
+  | { type: "user_message"; text: string; conversation_id?: string }
   | { type: "model_change"; model: string }
   | { type: "approval_reply"; id: string; approved: boolean }
   | { type: "cancel" }

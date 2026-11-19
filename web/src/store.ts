@@ -8,7 +8,7 @@
 
 import { create } from "zustand";
 import type { ServerEvent } from "./contract";
-import type { Block, ChatMessage, ConnectionState, PluginInfo, PublicState } from "../plugin-api";
+import type { Block, ChatMessage, ConnectionState, PluginInfo, PublicState, TurnStats } from "../plugin-api";
 
 export interface ChatState extends PublicState {
   /** id of the assistant message that is still receiving events, if any */
@@ -33,8 +33,12 @@ export const initialState: ChatState = {
   selectedModel: "",
 };
 
+// Messages outlive the page now (conversations are saved in localStorage), so
+// ids carry a per-page-load tag: a restored "a-1" must never collide with a
+// fresh one, or the reducer would stream into the wrong message.
+const session = Math.random().toString(36).slice(2, 8);
 let idCounter = 0;
-const newId = (prefix: string) => `${prefix}-${++idCounter}`;
+const newId = (prefix: string) => `${prefix}-${session}-${++idCounter}`;
 
 // ---------------------------------------------------------------- the reducer
 
@@ -206,6 +210,25 @@ export function setPluginInfo(name: string, info: PluginInfo | null): void {
     else delete plugins[name];
     return { plugins };
   });
+}
+
+/** Attach browser-measured timing to a finished message (see metrics.ts). */
+export function setTurnStats(id: string, stats: TurnStats): void {
+  flushServerEvents();
+  useStore.setState((s) => {
+    const i = s.messages.findIndex((m) => m.id === id);
+    if (i === -1) return s;
+    const messages = s.messages.slice();
+    messages[i] = { ...messages[i]!, stats };
+    return { messages };
+  });
+}
+
+/** Show another conversation's messages (see conversations.ts). Only between turns. */
+export function loadMessages(messages: ChatMessage[]): void {
+  flushServerEvents();
+  const usage = messages.findLast((m) => m.usage)?.usage;
+  useStore.setState({ messages, openTurnId: null, cancelRequested: false, usage });
 }
 
 export function resetChat(): void {

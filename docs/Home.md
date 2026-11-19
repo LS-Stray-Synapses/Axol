@@ -27,6 +27,7 @@ The project is still a prototype, but the architecture is already concrete enoug
 | [Decisions](Decisions/README.md) | Architecture Decision Records (ADRs): *why* we built it this way |
 | [Research](Research/README.md) | Papers, prior art, experiments |
 | [Meetings](Meetings/README.md) | Sync notes between contributors |
+| [Reviews](Reviews/) | One note per branch up for review: what changed, what to check |
 | [Templates](Templates/) | Note templates (insert with `Ctrl/Cmd+P → Templates: Insert template`) |
 
 ## Start here

@@ -65,6 +65,17 @@ function blank(folderId: string | null = null, order = 0): Conversation {
   return { id: uid("c"), title: UNTITLED, folderId, createdAt: t, updatedAt: t, order, messages: [] };
 }
 
+/** "New chat", then "New chat (1)", "New chat (2)", … skipping titles already taken. */
+const UNTITLED_RE = /^New chat( \(\d+\))?$/;
+
+function nextUntitled(): string {
+  const taken = new Set(Object.values(get().conversations).map((c) => c.title));
+  if (!taken.has(UNTITLED)) return UNTITLED;
+  let n = 1;
+  while (taken.has(`${UNTITLED} (${n})`)) n++;
+  return `${UNTITLED} (${n})`;
+}
+
 /** List order: manual `order`, newest first among equals. */
 export const byOrder = (a: Conversation, b: Conversation) => a.order - b.order || b.updatedAt - a.updatedAt;
 
@@ -221,15 +232,10 @@ function show(id: string) {
   loadMessages(get().conversations[id]!.messages);
 }
 
-/** Open a fresh chat. Reuses the current one if it's still empty. Returns false while a turn runs. */
+/** Open a fresh chat. Returns false while a turn runs. */
 export function newConversation(folderId: string | null = null): boolean {
   if (!canSwitch()) return false;
-  const cur = active();
-  if (cur && cur.messages.length === 0) {
-    if (cur.folderId !== folderId) moveConversation(cur.id, folderId);
-    return true;
-  }
-  const c = blank(folderId, topOrder(get().conversations));
+  const c = { ...blank(folderId, topOrder(get().conversations)), title: nextUntitled() };
   set({ conversations: { ...get().conversations, [c.id]: c } });
   show(c.id);
   return true;
@@ -333,7 +339,7 @@ export function deleteConversation(id: string): boolean {
 /** Name an untitled chat after the first thing the user said in it. */
 export function titleFromFirstMessage(text: string): void {
   const c = active();
-  if (!c || c.title !== UNTITLED) return;
+  if (!c || !UNTITLED_RE.test(c.title)) return;
   const line = text.trim().split("\n")[0]!.trim();
   if (!line) return;
   patch(c.id, { title: line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1)}…` : line });

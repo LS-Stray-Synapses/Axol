@@ -100,11 +100,16 @@ describe("conversations", () => {
     expect(useStore.getState().messages.map((m) => m.blocks[0])).toEqual([{ kind: "text", text: "two" }]);
   });
 
-  it("reuses an empty chat instead of piling up blank ones", () => {
+  it("opens another chat on every click, numbering untitled ones", () => {
     undo = initConversations(memoryStorage());
     newConversation();
     newConversation();
-    expect(all()).toHaveLength(1);
+    expect(all().map((c) => c.title).sort()).toEqual(["New chat", "New chat (1)", "New chat (2)"]);
+    renameConversation(all().find((c) => c.title === "New chat (1)")!.id, "kept");
+    newConversation();
+    expect(active().title).toBe("New chat (1)");
+    titleFromFirstMessage("from the click");
+    expect(active().title).toBe("from the click");
   });
 
   it("won't switch, create or delete the open chat while a turn runs", () => {
@@ -191,7 +196,7 @@ describe("conversations", () => {
 });
 
 describe("several chats at once, and manual order", () => {
-  /** Make chats "a", "b", "c"… (each with a message, so new chats aren't reused) and return their ids by title. */
+  /** Make chats "a", "b", "c"… and return their ids by title. */
   function makeChats(...titles: string[]) {
     undo = initConversations(memoryStorage());
     const ids: Record<string, string> = {};

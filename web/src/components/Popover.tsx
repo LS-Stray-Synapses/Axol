@@ -24,7 +24,10 @@ export function Popover({ label, title, placement = "down", align = "right", chi
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        e.preventDefault(); // handled: Esc closes this menu and nothing else
+        setOpen(false);
+      }
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);

@@ -1,5 +1,6 @@
 import { Slot } from "../slots";
 import { useStore } from "../store";
+import { LiveStats } from "./TurnStats";
 
 /** Header entries shown inline; more than this go into a "⋯" menu. */
 const HEADER_MAX = 4;
@@ -24,6 +25,7 @@ export function Header() {
         {running && <span className="ml-2 text-accent">● running</span>}
       </span>
       <div className="flex-1" />
+      <LiveStats />
       {usage && (
         <span data-usage className="shrink-0 font-mono text-xs text-muted" title="tokens used by the last turn">
           in {usage.input_tokens.toLocaleString()} · out {usage.output_tokens.toLocaleString()}

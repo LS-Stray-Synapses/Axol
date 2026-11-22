@@ -3,6 +3,7 @@ import type { ChatMessage } from "../../plugin-api";
 import { Markdown } from "./Markdown";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCard } from "./ToolCard";
+import { TurnStatsLine } from "./TurnStats";
 
 function MessageImpl({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
@@ -35,6 +36,7 @@ function MessageImpl({ message }: { message: ChatMessage }) {
         </div>
       )}
       {message.stopped && <div className="mt-1 text-xs italic text-muted">stopped</div>}
+      {message.stats && <TurnStatsLine stats={message.stats} />}
     </div>
   );
 }

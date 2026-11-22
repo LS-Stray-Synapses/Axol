@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { callOperation } from "./backend";
 import { mountApprovalDialog } from "./components/ApprovalDialog";
 import { ChatView } from "./components/ChatView";
+import { ConversationBar } from "./components/ConversationBar";
 import { Composer } from "./components/Composer";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
@@ -127,6 +128,7 @@ export function App() {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab.kind === "chat" ? (
               <>
+                <ConversationBar />
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ChatView />
                 </div>

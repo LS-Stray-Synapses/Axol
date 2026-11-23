@@ -84,6 +84,7 @@ sequenceDiagram
 | Evaluation & benchmarks | [Evaluation](Evaluation.md) | planned |
 | Experience recording | [Experience Store](Experience%20Store.md) | planned |
 | Model creation / fine-tuning | [Model Forge](Model%20Forge.md) | later |
+| Security, containers, multi-user | [Secure Axol](Secure%20Axol.md) | planned |
 
 Visual map: [Axol.canvas](Axol.canvas) (open in Obsidian).
 

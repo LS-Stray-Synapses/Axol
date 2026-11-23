@@ -36,3 +36,4 @@ The project is still a prototype, but the architecture is already concrete enoug
 2. [Visual map (Canvas)](Architecture/Axol.canvas): open in Obsidian
 3. [Front end / harness protocol](Architecture/Front%20end.md)
 4. [How we work in this vault](Contributing.md)
+5. [Secure Axol](Architecture/Secure%20Axol.md): where the project is going, in plain words

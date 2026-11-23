@@ -213,6 +213,25 @@ How a change goes live:
 
 **UI plugins the agent writes itself** run sandboxed in the browser (an isolated frame with a narrow message API, not the main page's session). They can only call what the core exposes to them. Hand-written plugins can keep today's path until then.
 
+### 9.1 Plugins and trust levels
+
+"Everything is a plugin" stays (ADR-0002): one registry, reversible registrations, hot swapping, composition as data. What's added is a **trust level** on every plugin, which decides who may change it and where it runs.
+
+| Level | Examples | Who can change it | Runs |
+|---|---|---|---|
+| **Core** | kernel, login, permission checks, limits, logs, watchdog, launcher client | an admin, by installing a new core version | in the core |
+| **Adjustable: settings** | prompts, loop-strategy settings, model per task, compositions | Axol, through §9 | in the core (it's data, not code) |
+| **Adjustable: code** | a loop, tool or context strategy Axol wrote | Axol, through §9 | **out of the core**, in a sandboxed plugin host talking over a narrow message API |
+| **UI** | screens, tabs | Axol-made ones through §9 | an isolated browser frame |
+
+- **Core plugins can't be unloaded, replaced or patched at runtime.** In the composition (profiles → bundles → patches), core rows are locked. A patch from the adjustable layer that targets one is rejected and logged.
+- **The permission check runs innermost**, right before a tool executes. Adjustable plugins may wrap a step (rewrite a prompt, retry, compact context), but they never run between the check and the execution.
+- **Why code plugins run outside the core:** Python has no walls inside one process. A plugin loaded into the harness could replace the permission function or read any user's data. Only settings are safe in-process.
+- **Backstop:** sandbox mounts and networks are enforced by the OS, and the GPU server keeps its own approved model list. A misbehaving plugin can make a job behave badly, but it can't widen that job's box.
+- **Seams** keep working: for example *shell → local / sandboxed provider*. In multi-user mode the core only allows the sandboxed provider.
+
+**What this costs** compared with an unguarded harness: changes wait for tests and approval (trusted projects can speed that up), code plugins pay a message round-trip, and sandboxes add about a second per job. **What it buys:** Axol can run unattended, serve several people and agents, and try bolder changes, because each one can be undone.
+
 ## 10. Watchdog
 
 It sits in the fixed core, because a stuck agent can't notice that it's stuck.
@@ -270,7 +289,7 @@ Its own service. Approved model list. Stage 1 runs one fixed model, then swappin
 Detectors, the retry → fallback → stop-and-report ladder, last-known-good, user data snapshots and restore. Resume interrupted jobs after a restart without repeating side effects (§7.1). Kill switch and alerts. Off-machine backups. Core updates with rollback and data migrations.
 
 ### Project 6: Safe evolution
-Versioned adjustable layer, sandbox tests on data copies, the safety test suite as a gate, benchmarks and scoring into the Experience Store, approval gate, one-click rollback, sandboxed agent-written UI plugins, model-per-task selection from benchmark results.
+Plugin trust levels with locked core rows (§9.1), a sandboxed plugin host for Axol-written code, the permission check innermost. Versioned adjustable layer, sandbox tests on data copies, the safety test suite as a gate, benchmarks and scoring into the Experience Store, approval gate, one-click rollback, sandboxed agent-written UI plugins, model-per-task selection from benchmark results.
 
 ### Project 7: The desktop app
 App window with a loading screen. Connect-to-server or run-locally modes. Containers started and stopped hidden. Installer that checks for Docker/Podman and the GPU. The window technology (e.g. Tauri, Electron, a browser in app mode) is decided at the start of this project. *Could move earlier, after project 1, if a nicer start matters before multi-user. It only depends on 1.7.*
@@ -288,6 +307,7 @@ App window with a loading screen. Connect-to-server or run-locally modes. Contai
 - Keep dsh-style evolution, including the UI, made robust and safe.
 - Jobs survive restarts and resume without repeating side effects (§7.1).
 - The ten extra guard rails in §5.3.
+- Everything stays a plugin, with trust levels: core plugins locked; Axol-written code runs outside the core (§9.1).
 - The app can connect to a server or run locally.
 
 ## 14. Left to the builder

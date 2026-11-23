@@ -48,6 +48,22 @@ flowchart LR
     Y -- yes --> L[Live<br/>old version kept<br/>for one-click undo]
 ```
 
+### Everything is still a plugin
+
+Like the DeepSeek harness, every part of Axol is a plugin that can be swapped while it runs. Each plugin also gets a **trust level**:
+
+| Level | Examples | Who can change it |
+|---|---|---|
+| Core | login, permission checks, limits, logs, watchdog | only you, with a new version |
+| Adjustable settings | prompts, loop settings, which model for which task | Axol, through the steps above |
+| Adjustable code | a new loop or tool that Axol wrote | Axol, through the steps above, and it **runs in its own sandbox**, never inside the core |
+| Screens | tabs and panels | Axol-made ones run in an isolated frame |
+
+Why code Axol writes can't run inside the core: in one Python process, nothing stops one piece of code from rewriting another. So the core can't hold anything Axol wrote.
+
+> [!tip] Still as powerful
+> Axol can still rebuild its loop, models, tools and screens. The guard rails cost a little speed and an approval step. In return, Axol can run on its own overnight, serve several people at once, and try bold changes, because each one can be undone.
+
 ## The picture
 
 ```mermaid

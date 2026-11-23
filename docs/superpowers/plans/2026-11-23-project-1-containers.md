@@ -48,6 +48,7 @@
 | `.env.example` | 1.5 | variable names, no values |
 | `web/src/contract.ts` + UI (modify) | 1.7 | new `model_status` event, a "model loading" banner |
 | `docs/Decisions/ADR-0005-containers.md` | 1.8 | what we chose and why, with the proof checklist |
+| `docs/Architecture/Threat Model.md` | 1.8 | first version of the one-page threat model |
 
 ## Review focus (what's most likely to bite)
 
@@ -206,6 +207,7 @@
 - [ ] Neither image contains `.env` or user data (repeat the 1.3 check on the final images).
 - [ ] Remove both containers, bring them back up, and everything is still there.
 - [ ] Write `docs/Decisions/ADR-0005-containers.md`: what was chosen in 1.1 to 1.7, why, the known gap (the harness can still reach the internet; closed in project 3), and this checklist with results.
+- [ ] Write the first one-page threat model, `docs/Architecture/Threat Model.md`: who or what we defend against, and which part of the design stops each one (design §5.3, item 10).
 - [ ] Update `README.md`'s "Run it" section with the container way, keeping the dev way.
 - [ ] Commit.
 

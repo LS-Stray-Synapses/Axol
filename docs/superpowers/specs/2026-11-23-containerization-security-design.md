@@ -44,6 +44,7 @@ We want:
 **Anti-goals (it fails even if it "works")**
 - The agent, or a change the agent made, can switch off its own permission checks, limits, watchdog or logs.
 - One user's job can read another user's files.
+- Something read from the internet becomes a standing instruction (saved to memory, or passed to a more powerful agent).
 - Something from the internet can cause private data to be sent out.
 - Safety relies on the model obeying a prompt instead of a rule the core enforces.
 - Security that's so annoying (an approval for every write) that people click "yes" without reading.
@@ -127,6 +128,19 @@ flowchart LR
 6. **Logs only grow, and the agent can't write to them.**
 7. **Secrets live in an env file or secret store, never in an image or in git.**
 
+### 5.3 Extra guard rails
+
+1. **Memory has a source.** Memory is per user. Every entry records where it came from. A job that has touched internet content can't write memory without approval, so a web page can't plant a standing instruction.
+2. **Delegation only narrows.** An agent that starts a sub-agent can give it a subset of its own permissions, never more. Messages between agents are untrusted, like web content.
+3. **Secret broker.** Agents and sandboxes never see real keys (GitHub, email, APIs). The core adds them to outgoing requests.
+4. **Safety tests gate change.** A set of attack tests (prompt injection, "delete everything", "read another user's files") must pass before any adjustable-layer version goes live (§9).
+5. **Supply chain pinned.** Base images by digest, Python/npm packages by version, MCP servers and plugins by version, model files by checksum.
+6. **The core updates safely too.** Core releases are image versions with rollback, and data formats carry a version with one-step migrations.
+7. **Backups off the machine.** 3-2-1: three copies, two kinds of storage, one somewhere else.
+8. **Kill switch and alerts.** An admin button stops every job at once. The owner is notified when the watchdog stops a job or an approval is waiting.
+9. **Logs are private.** Users see their own logs, admins see all, and old logs are deleted after a set retention time.
+10. **Threat model on paper.** One page: who or what we defend against and which part stops each one. Updated at the end of every project.
+
 ## 6. Permission lists (job profiles)
 
 Every job carries a permission list the core checks before giving out any tool. For example:
@@ -165,6 +179,15 @@ Every job carries a permission list the core checks before giving out any tool. 
 
 **Logs.** Each job records who started it, its permission list, each model request and tool call with inputs and results, approvals, fallbacks, and resource use. Logs are append-only and written by the core, outside every sandbox. Admins and the job's owner can read them in the UI. Builds on the session log from [ADR-0004](../../Decisions/ADR-0004-per-conversation-sessions.md) and the [Experience Store](../../Architecture/Experience%20Store.md).
 
+### 7.1 Jobs survive restarts
+
+Containers forget; the host remembers. Every job has a **job record** the core keeps in the data folder (a small database such as SQLite): owner, permission list, state (`queued → running → done / failed / interrupted`), last finished step, checkpoint id.
+
+- **Each step is logged as it happens**, not at the end of the turn, so a crash loses at most the step in flight. (Today `sessions/<id>.jsonl` is appended at the end of a turn.)
+- **On start**, the harness reads the job records: queued jobs go back in the queue; running ones become *interrupted* and either resume from the last finished step or ask the owner.
+- **Never repeat a side effect.** On resume, a step already in the log with its result is replayed from the log, not executed again. The log is the source of truth (the dsh idea, ADR-0004).
+- Files: a job's sandbox mounts its folders from the host data folder, so files outlive the sandbox; the checkpoint taken before the job is what "undo this job" restores.
+
 ## 8. GPU server
 
 - **Owns:** the approved model list (name → file, launch settings, VRAM cost), the VRAM budget, worker lifecycle (start, health-check, stop), routing requests to a ready worker, and a **model-call queue** with fairness between users.
@@ -184,8 +207,9 @@ How a change goes live:
 1. **Proposed.** The agent or a person proposes it, and it gets a new version number.
 2. **Tested in a sandbox** against copies of data, never the real files.
 3. **Benchmarked.** The same tasks run on the old and new versions (or on several models). Scores: finished or not, time, tokens, user rating. Results go to the Experience Store, and the GPU server uses them to pick the model per task type. Benchmarks run at low queue priority, when the GPU is idle.
-4. **Approved** by the owner (an admin, for anything system-wide).
-5. **Live.** The previous version stays available as last-known-good, and rolling back takes one click.
+4. **Passes the safety tests** (§5.3, item 4). A version that's faster but fails one doesn't go live.
+5. **Approved** by the owner (an admin, for anything system-wide).
+6. **Live.** The previous version stays available as last-known-good, and rolling back takes one click.
 
 **UI plugins the agent writes itself** run sandboxed in the browser (an isolated frame with a narrow message API, not the main page's session). They can only call what the core exposes to them. Hand-written plugins can keep today's path until then.
 
@@ -208,6 +232,8 @@ For other people, the installer checks for Docker (or Podman), GPU drivers and t
 ## 12. Roadmap: projects and features
 
 Each project ships something usable and is taught as its own step-by-step plan. Order matters: each project stands on the ones before it.
+
+**Ongoing, every project:** the threat model (§5.3, item 10) is written at the end of project 1 and updated at the end of each project after that. Supply-chain pinning (item 5) applies from the first image.
 
 ### Project 1: Containers (detailed, next up)
 
@@ -232,19 +258,19 @@ What you have when it's done: `docker compose up` (later the app) starts Axol in
 - Each step is written down as a vault note or ADR as it's finished.
 
 ### Project 2: People and permissions
-Admin-created accounts (no sign-up page), login with a proven library, a cookie session over the VPN. Per-user folders for workspace, memory and conversations. Conversations stored server-side and tied to a user (ADR-0004 follow-up). Model choice belongs to the conversation, not the process. Roles: admin and user. The data model has owner + members ready for sharing. The harness is published on the VPN interface only.
+Admin-created accounts (no sign-up page), login with a proven library, a cookie session over the VPN. Per-user folders for workspace, memory and conversations. Conversations stored server-side and tied to a user (ADR-0004 follow-up). Model choice belongs to the conversation, not the process. Roles: admin and user. The data model has owner + members ready for sharing. The harness is published on the VPN interface only. Login rate limits and session expiry. Memory per user, with a source on every entry. Logs visible per user, with retention.
 
 ### Project 3: Job sandboxes
-A job-runner interface inside the harness; tool running moves behind it. Permission lists (profiles). The launcher service. A sandbox image. Files profile (no network) and internet profile (egress filter). Auto-split researcher → file job with visible handoff text. Path confinement in file tools. Per-job limits. Checkpoints, history/trash and "undo this job". The append-only audit log, plus a UI to read it.
+A job-runner interface inside the harness; tool running moves behind it. Permission lists (profiles). The launcher service. A sandbox image. Files profile (no network) and internet profile (egress filter). Auto-split researcher → file job with visible handoff text. Path confinement in file tools. Per-job limits. Checkpoints, history/trash and "undo this job". The append-only audit log, plus a UI to read it. Job records and per-step logging (§7.1). Delegation only narrows. Internet-tainted jobs can't write memory. Secret broker.
 
 ### Project 4: GPU server
-Its own service. Approved model list. Stage 1 runs one fixed model, then swapping, then several workers. Model-call queue with fairness. Readiness/ETA answers. Secret-authenticated harness link. Other backends (Ollama, APIs).
+Its own service. Approved model list. Stage 1 runs one fixed model, then swapping, then several workers. Model-call queue with fairness. Readiness/ETA answers. Secret-authenticated harness link. Model checksums checked before loading. Other backends (Ollama, APIs).
 
 ### Project 5: Watchdog and recovery
-Detectors, the retry → fallback → stop-and-report ladder, last-known-good, user data snapshots and restore.
+Detectors, the retry → fallback → stop-and-report ladder, last-known-good, user data snapshots and restore. Resume interrupted jobs after a restart without repeating side effects (§7.1). Kill switch and alerts. Off-machine backups. Core updates with rollback and data migrations.
 
 ### Project 6: Safe evolution
-Versioned adjustable layer, sandbox tests on data copies, benchmarks and scoring into the Experience Store, approval gate, one-click rollback, sandboxed agent-written UI plugins, model-per-task selection from benchmark results.
+Versioned adjustable layer, sandbox tests on data copies, the safety test suite as a gate, benchmarks and scoring into the Experience Store, approval gate, one-click rollback, sandboxed agent-written UI plugins, model-per-task selection from benchmark results.
 
 ### Project 7: The desktop app
 App window with a loading screen. Connect-to-server or run-locally modes. Containers started and stopped hidden. Installer that checks for Docker/Podman and the GPU. The window technology (e.g. Tauri, Electron, a browser in app mode) is decided at the start of this project. *Could move earlier, after project 1, if a nicer start matters before multi-user. It only depends on 1.7.*
@@ -260,6 +286,8 @@ App window with a loading screen. Connect-to-server or run-locally modes. Contai
 - Our own GPU server that can pick and swap models and later run several.
 - The agent may change its loop and model and benchmark them. A stuck or broken job falls back or stops and reports.
 - Keep dsh-style evolution, including the UI, made robust and safe.
+- Jobs survive restarts and resume without repeating side effects (§7.1).
+- The ten extra guard rails in §5.3.
 - The app can connect to a server or run locally.
 
 ## 14. Left to the builder

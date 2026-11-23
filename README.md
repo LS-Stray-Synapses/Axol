@@ -1,8 +1,9 @@
-# Axol
-
-**A self-adapting agent architecture with a live prototype harness and web UI.**
-
-Axol is a model-agnostic agent architecture built around a harness that can adapt to the model it is running. The project is no longer only a design document: the repo includes a working prototype backend, a browser client, and a real tool/model integration pattern that matches the intended runtime architecture.
+<div align="center">
+  <img src="assets/Axol.jpeg">
+  <h1>Axol</h1>
+  <h2>A self-adapting agent architecture with a live prototype harness and web UI.<h2>
+  <p>Axol is a model-agnostic agent architecture built around a harness that can adapt to the model it is running. The project is no longer only a design document: the repo includes a working prototype backend, a browser client, and a real tool/model integration pattern that matches the intended runtime architecture.</p>
+</div>
 
 > ⚠️ **Status: prototype in progress.** The system has a working OpenAI-compatible streaming agent loop and live UI, but is not a finished production harness yet.
 

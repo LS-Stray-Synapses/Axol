@@ -1,0 +1,266 @@
+---
+status: draft
+date: 2026-11-23
+owner: Lenos
+tags: [design, security]
+---
+# Axol: containers, people and safe evolution (design)
+
+> Roadmap design for making Axol **robust and safer** without losing what makes it Axol: a harness that can change its own loop, models and UI as it goes (the idea we like in the [DeepSeek harness](../../Research/DeepSeek%20harness.md), concept only, no dsh code).
+>
+> Lenos builds every step; Claude teaches, without handing over code. This document is the map. Each project gets its own teaching plan, one feature at a time.
+
+## 1. Intent
+
+Axol today runs as three terminal processes under Lenos's own user account: llama.cpp on `:8080`, the harness (`mock_server.py`) on `:8000`, and Vite on `:5173`. Anything the agent does, it does with full access to the home folder.
+
+We want:
+
+- **Safety.** The agent can only reach what the current task needs. One user's data is walled off from another's. Mistakes can be undone. Every action is logged where the agent cannot edit it.
+- **Robustness.** A broken or stuck agent is noticed, falls back to something that works, or stops and reports. A broken container is thrown away and restarted from a clean image.
+- **Evolution kept.** Axol may change its agent loop, switch models, benchmark them, and grow its UI. The safety rules sit in a layer that evolution can never touch.
+- **A real app.** Click an icon, a window opens, the containers run hidden. Other people can use it too.
+
+## 2. Goals, non-goals, anti-goals
+
+**Goals**
+- llama.cpp runs in its own container. The harness and the built UI run in another. All persistent data lives outside the images.
+- Several people (Lenos, Stefanos, later others) log in to one GPU server over the VPN.
+- Every job runs with a **permission list** that the core enforces: which folders, read or write, internet yes or no, which models.
+- A job never gets **private files and the internet together** by default.
+- Limits on storage, compute and time, at the container, user and job level.
+- Undo, checkpoints, snapshots and append-only logs.
+- A GPU server that decides which models run, swaps them, and later runs several at once.
+- A watchdog that detects stuck or broken jobs and falls back or stops.
+- Safe self-change: versioned, tested in a sandbox, benchmarked, approved, reversible.
+- A desktop app that either connects to a server or runs everything locally.
+
+**Non-goals (for now)**
+- Kubernetes, or running across many machines. The design shouldn't block it, but we don't build it.
+- Hiding data from the server owner. The server sits in a trusted place, and its owner can read its disk.
+- A public website. Access is VPN only.
+- Shared projects in the first people release. The data model allows them; we build them later.
+
+**Anti-goals (it fails even if it "works")**
+- The agent, or a change the agent made, can switch off its own permission checks, limits, watchdog or logs.
+- One user's job can read another user's files.
+- Something from the internet can cause private data to be sent out.
+- Safety relies on the model obeying a prompt instead of a rule the core enforces.
+- Security that's so annoying (an approval for every write) that people click "yes" without reading.
+- Starting Axol takes a terminal and commands.
+
+## 3. Where we start (findings from the code)
+
+| Finding | Where | Why it matters |
+|---|---|---|
+| `read_file` / `write_file` / `delete_file` join the filename onto the workspace with no check. `../` escapes it. | `modules/local_tools.py` | Containers limit how far the damage spreads, but the hole is still there. It gets fixed in project 3. (`workspace.read` in `mock_server.py` *does* check.) |
+| `fetch` MCP server (internet) and file tools are given to the same agent. | `mcp_server.json`, `modules/agent.py` | Breaks the "never internet + files together" rule. |
+| MCP servers are launched with `uvx`, which downloads packages when it starts. | `mcp_server.json` | Inside a container, that means internet access at startup plus unpinned code. Install them into the image ahead of time instead. |
+| No login. Everyone shares `memory.md`, `workspace/` and all of `sessions/`. | `mock_server.py` | Needs users before anyone else connects. |
+| `model_change` sets `app.state.agent.model_name` for the whole process. | `mock_server.py` (`ws_endpoint`) | One user switching models switches everyone. The model choice has to belong to the job or conversation. |
+| No queue. Each connection's turn calls llama.cpp straight away. | `mock_server.py`, `modules/agent.py` | Two users fight over one 8 GB GPU with no feedback. |
+| Model endpoints are hardcoded to `localhost:8080` / `:11434`. | `mock_server.py` (`MODELS`) | Inside a container, `localhost` means the container itself. Endpoints have to come from configuration. |
+| FastAPI already serves `web/dist` when it exists. | `mock_server.py` | The UI doesn't need its own container. Build it into the harness image. |
+| UI plugins are JS files the browser `import()`s into the main page. | `plugins/`, `web/src/plugins.ts` | A plugin the agent wrote itself would run with the user's full session. It needs a sandbox before the agent may generate UI. |
+| Best local setup: prism fork + PQ2_0, all layers on GPU, 8K context, 36 tok/s. The fork loads CUDA libs from the official build. | `~/llama/RESULTS.md` | Building the llama.cpp image is the trickiest container step. |
+
+## 4. Approaches considered
+
+**A. Two containers, tools run inside the harness.** Simplest. But every job runs where the logins and all users' data live, so it can't meet the permission rules. *Used as the first stage only.*
+
+**B. The harness orchestrates; each job runs in its own throwaway sandbox container.** The harness keeps logins, queue and logs, and never runs a tool itself. A small **launcher** is the only part allowed to start containers, and all it can start is a sandbox from an approved profile. Strongest isolation, and it fits several machines later. Costs more moving parts and about a second of startup per job.
+
+**C. One long-lived tools container, jobs as sandboxed processes inside it** (bubblewrap/nsjail). Faster to start and needs no Docker control, but thinner walls between jobs, harder to learn and debug, and a worse fit for several machines.
+
+**Chosen: B, built in stages** (Lenos). Project 1 builds A, with tool running kept separate inside the harness, so project 3 can replace it with launcher + sandboxes without a rewrite. C stays available if sandbox startup ever becomes a bottleneck.
+
+**GPU server: our own, or an existing model swapper underneath** (llama-swap, llama-server's multi-model mode)? **Chosen: our own thin service** (Lenos agreed to the recommendation). Choosing a model per task is core to Axol, and the prism fork needs custom launch settings. It starts with one fixed model.
+
+## 5. The shape of the system
+
+```mermaid
+flowchart LR
+    subgraph Client["Desktop app (or browser)"]
+        App[Window: loading screen → Axol UI]
+    end
+    subgraph Server["GPU server machine (trusted place, VPN only)"]
+        subgraph Core["FIXED CORE: the agent can never change this"]
+            H["Harness<br/>login · permissions · queue<br/>logs · watchdog · serves UI"]
+            L["Launcher<br/>only power: start a sandbox<br/>from an approved profile"]
+            G["GPU server<br/>approved models · VRAM budget<br/>model-call queue · workers"]
+        end
+        subgraph Evolvable["ADJUSTABLE LAYER: versioned, tested, approved"]
+            E["loop strategies · prompts<br/>model choices · UI plugins"]
+        end
+        S1["Job sandbox: files<br/>(no internet)"]
+        S2["Job sandbox: internet<br/>(no private files)"]
+        W1["llama.cpp worker #1"]
+        W2["worker #2… (bigger GPU)"]
+        D[("Data volumes<br/>per-user files · sessions<br/>memory · logs · snapshots")]
+    end
+    App -- "VPN + login" --> H
+    H --> E
+    H --> L --> S1 & S2
+    H -- "model request + secret" --> G --> W1 & W2
+    S1 --- D
+    H --- D
+```
+
+### 5.1 Parts and what each is trusted with
+
+| Part | Holds / can do | Network | Can it reach user files? |
+|---|---|---|---|
+| **Harness** (fixed core) | Logins, permission checks, job queue, append-only logs, watchdog, serves the UI. Runs the agent loop: talks to the GPU server, hands tool calls to sandboxes. **Never runs a tool itself** (from project 3 on). | Published only on the VPN interface (localhost in project 1). Internal network to GPU server and launcher. | Its own data only (accounts, logs, sessions). It reaches user files through sandboxes. |
+| **Launcher** (fixed core) | The only part that controls the container engine. Accepts exactly one request: "start a sandbox with profile X, mounting folders Y, for job Z". | Internal only, harness-only. | Mounts them into sandboxes. Doesn't read them. |
+| **Job sandbox** | Runs one job's tools, then is deleted. Gets only the folders on its permission list. | **Files profile:** no network at all. **Internet profile:** web only, through an egress filter that blocks the VPN, the LAN and internal Axol addresses. | Files profile: only the allowed folders. Internet profile: none. |
+| **GPU server** (fixed core) | Approved model list, VRAM budget, starting/stopping llama.cpp workers, routing, model-call queue. Accepts requests only from the harness, with a secret. | Internal only. | No. Models are mounted read-only. |
+| **llama.cpp worker** | Runs one model. | Internal only, **no internet**. | No. |
+| **Data volumes** | Everything that must survive: per-user files, sessions, memory, logs, snapshots, model files. | n/a | n/a |
+
+### 5.2 Rules every part follows
+
+1. **The core enforces; the model never decides its own permissions.** Tools missing from a job's permission list don't exist for that job.
+2. **Data flows one way.** Internet → (plain text the user can see) → file job is allowed. Files → internet is never allowed without explicit approval.
+3. **Undo instead of nagging.** Reads and writes run freely. Nothing is truly overwritten or deleted: old versions go to history/trash. Approval is only needed for actions that can't be undone (emptying the trash, changing sharing, touching someone else's shared project, combining internet + files in a trusted project).
+4. **Containers are disposable.** Nothing important lives inside a container. Images are built once and run with a read-only filesystem where possible.
+5. **Least privilege everywhere.** Non-root users in images, dropped Linux capabilities, no privilege escalation, CPU/memory/process/disk limits.
+6. **Logs only grow, and the agent can't write to them.**
+7. **Secrets live in an env file or secret store, never in an image or in git.**
+
+## 6. Permission lists (job profiles)
+
+Every job carries a permission list the core checks before giving out any tool. For example:
+
+| Field | Example |
+|---|---|
+| owner | `lenos` |
+| scope | `lenos/notes/` (later: `project:axol-docs`) |
+| files | read `notes/`, write `notes/drafts/` |
+| internet | off |
+| models allowed | `bonsai-2:27b`, `qwen3.5:4b` |
+| limits | 10 min, 50 tool calls, 200k tokens |
+
+**Default for a mixed task** (Lenos chose): split it automatically. *"Find the llama.cpp release notes and add a summary to my notes"* becomes a researcher job (internet, no files) that returns plain text. The UI shows that text, then a file job (files, no internet) uses it. **Later:** a project the owner marks as *trusted* may combine both, with approval.
+
+**Sharing** (later): every piece of data has an owner. Sharing gives named people a role on it (view / edit / run agent) plus restrictions. Private by default, and sharing is always deliberate. Even while it isn't built, the data model has **owner + members** from the start.
+
+## 7. Limits, recovery and logs
+
+**Limits**
+
+| Level | What's limited |
+|---|---|
+| Container | CPU, memory, number of processes, disk |
+| User | storage quota, fair share of the queue (max queued and running jobs) |
+| Job | wall-clock time, tool calls, tokens |
+
+**Recovery**
+
+| Level | How |
+|---|---|
+| Job | Every file change a job makes is one checkpoint. "Undo this job" restores it in one step. |
+| Container | Thrown away and recreated from its image. Data lives on volumes. |
+| Data | Regular snapshots of user data volumes, so you can restore to an earlier day. |
+| Harness behaviour | The *last-known-good* version of the adjustable layer is always kept (§9). |
+
+**Logs.** Each job records who started it, its permission list, each model request and tool call with inputs and results, approvals, fallbacks, and resource use. Logs are append-only and written by the core, outside every sandbox. Admins and the job's owner can read them in the UI. Builds on the session log from [ADR-0004](../../Decisions/ADR-0004-per-conversation-sessions.md) and the [Experience Store](../../Architecture/Experience%20Store.md).
+
+## 8. GPU server
+
+- **Owns:** the approved model list (name → file, launch settings, VRAM cost), the VRAM budget, worker lifecycle (start, health-check, stop), routing requests to a ready worker, and a **model-call queue** with fairness between users.
+- **Answers:** "ready", "wait, loading (ETA)", or "no, not allowed / doesn't fit".
+- **The agent can ask for a different model mid-task.** The harness checks the job's permission list, then asks the GPU server, which decides whether to swap now or make the request wait.
+- **Security:** only reachable from the harness, with a secret. Only loads models from the approved list. The agent can never make it download or load a model from a path or URL, because a malicious model file is a real attack. Model files are read-only, and only an admin adds new ones.
+- **On this laptop (8 GB):** Bonsai 27B fills the GPU, so only one big model fits at a time. A swap costs several seconds of reload. The design still assumes a bigger GPU later.
+- **Stages:** (1) one fixed model, (2) swapping on request, (3) several workers / several GPUs, (4) Ollama or API models as other backend types behind the same interface.
+
+## 9. Safe evolution (keeping the dsh idea, adding guard rails)
+
+What may change: **the adjustable layer**, meaning loop strategies, prompts, model choice per task type, context handling, and UI plugins.
+What may never change: **the fixed core**, meaning login, permission lists, limits, launcher, GPU server's approved list, watchdog, logs.
+
+How a change goes live:
+
+1. **Proposed.** The agent or a person proposes it, and it gets a new version number.
+2. **Tested in a sandbox** against copies of data, never the real files.
+3. **Benchmarked.** The same tasks run on the old and new versions (or on several models). Scores: finished or not, time, tokens, user rating. Results go to the Experience Store, and the GPU server uses them to pick the model per task type. Benchmarks run at low queue priority, when the GPU is idle.
+4. **Approved** by the owner (an admin, for anything system-wide).
+5. **Live.** The previous version stays available as last-known-good, and rolling back takes one click.
+
+**UI plugins the agent writes itself** run sandboxed in the browser (an isolated frame with a narrow message API, not the main page's session). They can only call what the core exposes to them. Hand-written plugins can keep today's path until then.
+
+## 10. Watchdog
+
+It sits in the fixed core, because a stuck agent can't notice that it's stuck.
+
+- **Detects:** the same tool call repeating, no progress for N steps, a time/token/tool-call budget running out, model errors or timeouts, malformed tool calls, a worker or sandbox crashing.
+- **Ladder:** (1) retry once, (2) fall back to the last-known-good model + loop, (3) stop, keep the checkpoint, and report to the user what happened, with a link to the log.
+
+## 11. Two ways to run it
+
+The same app works in two modes. This only works because UI, harness and model stay separate.
+
+- **Connect to a server.** The app opens a window to a harness on the VPN. The laptop needs no Docker and no GPU.
+- **Run locally.** The app starts the containers on this machine, shows a loading screen ("waking the model…") until the harness and model report ready, then shows the UI. Closing the window stops them or leaves them running, depending on a setting.
+
+For other people, the installer checks for Docker (or Podman), GPU drivers and the container GPU toolkit, and walks them through setup.
+
+## 12. Roadmap: projects and features
+
+Each project ships something usable and is taught as its own step-by-step plan. Order matters: each project stands on the ones before it.
+
+### Project 1: Containers (detailed, next up)
+
+What you have when it's done: `docker compose up` (later the app) starts Axol in two containers, with data that survives, the model on the GPU, and nothing running as your user.
+
+| # | Feature | Done when |
+|---|---|---|
+| 1.1 | **Host prep.** Install the container engine. Choose how to run it safely (rootless Docker or Podman, rather than the root-equivalent `docker` group). Install the NVIDIA container toolkit. | A throwaway CUDA container prints `nvidia-smi` with the RTX 5060 visible. |
+| 1.2 | **Config out of code.** The harness reads model endpoints, ports and data paths (sessions, memory, workspace, plugins) from environment variables, with today's values as defaults. | The harness runs exactly as today outside containers, and can be pointed somewhere else without editing code. |
+| 1.3 | **Harness image.** Python base, pinned deps, a build stage that produces `web/dist`, non-root user, `.dockerignore` (no `.venv`, `.env`, `sessions/`, `node_modules`, `docs/`). MCP servers installed at build time, not downloaded at start. | The image builds, starts, serves the UI on `:8000`, and doesn't contain your secrets or data. |
+| 1.4 | **llama.cpp image.** CUDA base, a llama.cpp build (start with official, then the prism fork with its library path), model mounted read-only, non-root, health check. | The container serves `/v1` with all layers on the GPU, matching the benchmark speed roughly. |
+| 1.5 | **Compose file.** Two services. An internal network for llama.cpp (no internet). The harness published on `127.0.0.1` only. Named volumes / bind mounts for data. Health checks, start order "after llama is healthy", restart policy. Secrets from an env file. | One command starts both. Restarting them keeps conversations and memory. |
+| 1.6 | **Hardening.** CPU, memory and process limits. Read-only root filesystem with tmpfs where needed. Dropped capabilities, no-new-privileges. | Containers still work, and a quick check shows each restriction in place. |
+| 1.7 | **Ready signal.** The harness can tell whether the model is ready yet, and the UI shows "model loading" instead of failing. | Groundwork for the app's loading screen. |
+| 1.8 | **Prove it.** A short checklist: llama.cpp can't reach the internet; the harness can't see files outside its volumes; killing a container and starting it again loses nothing; the image has no secrets. | Every item checked and written into the vault. |
+
+**Project 1 calls (Claude's, change them if you disagree):**
+- The `fetch` MCP server is **off** in project 1, so internet and files don't meet in one agent before sandboxes exist. `time` stays on, since it needs no network.
+- Ollama models are left out of the containers for now. They come back as a GPU-server backend in project 4.
+- Data uses bind mounts into a clear folder on the host (easy to see and back up) rather than anonymous volumes.
+- Day-to-day development stays as today (Vite + `uvicorn --reload` outside containers). Containers are how Axol *runs*, not how it's edited.
+- Each step is written down as a vault note or ADR as it's finished.
+
+### Project 2: People and permissions
+Admin-created accounts (no sign-up page), login with a proven library, a cookie session over the VPN. Per-user folders for workspace, memory and conversations. Conversations stored server-side and tied to a user (ADR-0004 follow-up). Model choice belongs to the conversation, not the process. Roles: admin and user. The data model has owner + members ready for sharing. The harness is published on the VPN interface only.
+
+### Project 3: Job sandboxes
+A job-runner interface inside the harness; tool running moves behind it. Permission lists (profiles). The launcher service. A sandbox image. Files profile (no network) and internet profile (egress filter). Auto-split researcher → file job with visible handoff text. Path confinement in file tools. Per-job limits. Checkpoints, history/trash and "undo this job". The append-only audit log, plus a UI to read it.
+
+### Project 4: GPU server
+Its own service. Approved model list. Stage 1 runs one fixed model, then swapping, then several workers. Model-call queue with fairness. Readiness/ETA answers. Secret-authenticated harness link. Other backends (Ollama, APIs).
+
+### Project 5: Watchdog and recovery
+Detectors, the retry → fallback → stop-and-report ladder, last-known-good, user data snapshots and restore.
+
+### Project 6: Safe evolution
+Versioned adjustable layer, sandbox tests on data copies, benchmarks and scoring into the Experience Store, approval gate, one-click rollback, sandboxed agent-written UI plugins, model-per-task selection from benchmark results.
+
+### Project 7: The desktop app
+App window with a loading screen. Connect-to-server or run-locally modes. Containers started and stopped hidden. Installer that checks for Docker/Podman and the GPU. The window technology (e.g. Tauri, Electron, a browser in app mode) is decided at the start of this project. *Could move earlier, after project 1, if a nicer start matters before multi-user. It only depends on 1.7.*
+
+## 13. Decided by Lenos
+- Two containers to start: llama.cpp alone, harness + UI together.
+- Approach B (per-job sandboxes), built in stages.
+- Logins. Each user has their own data. Sharing with permission and restrictions comes later. Admin-created accounts.
+- VPN-only access. The server is in a trusted place.
+- Never internet + private files in one job by default. Auto-split, with trusted projects later.
+- Undo instead of approvals for reversible actions.
+- Limits on storage and compute. Recovery to a previous state. Readable logs.
+- Our own GPU server that can pick and swap models and later run several.
+- The agent may change its loop and model and benchmark them. A stuck or broken job falls back or stops and reports.
+- Keep dsh-style evolution, including the UI, made robust and safe.
+- The app can connect to a server or run locally.
+
+## 14. Left to the builder
+Exact base images and versions, names of services/networks/volumes, folder layout on the host, the library for logins, the egress-filter mechanism, the benchmark scoring formula, the watchdog thresholds, and the app's window technology. Each gets chosen in its project's plan, with the reason written down.

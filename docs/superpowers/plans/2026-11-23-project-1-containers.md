@@ -28,7 +28,9 @@
 - **No secrets or user data in any image.** Secrets come from `.env` (already gitignored). Commit `.env.example` with names only.
 - `fetch` MCP server **off** in containers. `time` stays on, installed at build time (no `uvx` downloads at start).
 - Ollama models are left out in containers.
-- Host data folder: **`~/.local/share/axol/`**, with `sessions/`, `workspace/` and `memory.md` inside. This is the standard Linux place for app data, and the project 7 app will use it too.
+- Host folders (Lenos chose a visible workspace, 2026-11-24):
+  - **`~/Axol-workspace/`**: the user's files, visible and easy to open. It holds nothing else. **Never** the Desktop or the repo, because the agent can write and delete there.
+  - **`~/.local/share/axol/`**: Axol's internal state, `sessions/` and `memory.md`. This is the standard Linux place for app data, and the project 7 app will use it too.
 - Outside containers, Axol keeps working exactly as today: same paths, same three-terminal dev setup.
 - `mock_server.py` changes in 1.2 and 1.7 touch the backend you share with Stefanos. Tell him before you merge.
 
@@ -89,15 +91,16 @@
 |---|---|---|
 | `AXOL_LLAMA_URL` | `http://localhost:8080/v1` | `http://axol-llama:8080/v1` |
 | `AXOL_OLLAMA_URL` | `http://localhost:11434/v1`; **empty string = leave Ollama models out** | empty |
-| `AXOL_DATA_DIR` | repo root (so `sessions/`, `workspace/`, `memory.md` stay where they are) | `/data` |
+| `AXOL_DATA_DIR` | repo root (so `sessions/` and `memory.md` stay where they are) | `/data` |
+| `AXOL_WORKSPACE_DIR` | repo `workspace/` | `/workspace` |
 | `AXOL_MCP_CONFIG` | repo `mcp_server.json` | `/app/deploy/harness/mcp_server.json` |
 
-`modules/settings.py` holds one function, `load_settings() -> Settings`, where `Settings` is a small frozen dataclass or pydantic model with `llama_url: str`, `ollama_url: str | None`, `data_dir: Path`, `mcp_config: Path`. `mock_server.py` builds `WORKSPACE`, `MEMORY_FILE`, `SESSIONS`, `MCP_CONFIG` and `MODELS` from it. `PLUGINS_DIR` and `DIST_DIR` stay relative to the code, because they're part of the app, not data.
+`modules/settings.py` holds one function, `load_settings() -> Settings`, where `Settings` is a small frozen dataclass or pydantic model with `llama_url: str`, `ollama_url: str | None`, `data_dir: Path`, `workspace_dir: Path`, `mcp_config: Path`. `mock_server.py` builds `WORKSPACE`, `MEMORY_FILE`, `SESSIONS`, `MCP_CONFIG` and `MODELS` from it. `PLUGINS_DIR` and `DIST_DIR` stay relative to the code, because they're part of the app, not data.
 
 - [ ] Add `requirements-dev.txt` with a pinned `pytest`, and install it into `.venv`.
 - [ ] Write `tests/test_settings.py` first:
-  - `test_defaults_match_today`: with no env vars set, the URLs equal today's values and `data_dir` is the repo root.
-  - `test_env_overrides`: with all four vars set, each field equals the var.
+  - `test_defaults_match_today`: with no env vars set, the URLs equal today's values, `data_dir` is the repo root and `workspace_dir` is the repo's `workspace/`.
+  - `test_env_overrides`: with all five vars set, each field equals the var.
   - `test_empty_ollama_disables_it`: `AXOL_OLLAMA_URL=""` gives `ollama_url is None`.
 - [ ] Run the tests and watch them fail. Then write `load_settings`, then watch them pass.
 - [ ] Wire `mock_server.py` to use it. When `ollama_url` is `None`, the Qwen entries aren't added to `MODELS`.
@@ -153,10 +156,10 @@
 **Decisions locked:**
 - Networks: `axol-internal` (`internal: true`, both services) and `axol-edge` (harness only, so its port can be published).
 - `axol-llama`: on `axol-internal` only, no published ports, GPU device, `~/Models/Bonsai-27B` read-only.
-- `axol-harness`: `127.0.0.1:8000:8000`, `~/.local/share/axol` mounted at `/data`, env from `.env`, starts after llama is healthy, restart `unless-stopped`.
+- `axol-harness`: `127.0.0.1:8000:8000`, `~/.local/share/axol` mounted at `/data`, `~/Axol-workspace` mounted at `/workspace`, env from `.env`, starts after llama is healthy, restart `unless-stopped`.
 - Rootless ownership: use `keep-id` (or an equivalent UID mapping), so files the container writes belong to `lenos` on the host.
 
-- [ ] Create `~/.local/share/axol/` and copy in your current `memory.md` and `workspace/` if you want to keep them.
+- [ ] Create `~/.local/share/axol/` and `~/Axol-workspace/`. Copy in your current `memory.md` and `workspace/` files if you want to keep them.
 - [ ] Write `compose.yaml` and `.env.example`.
 - [ ] Bring it up, open the UI, chat, save a memory.
 - [ ] **Check (review focus 2):** the new session file on the host belongs to `lenos`.
@@ -202,7 +205,7 @@
 **Why:** security you haven't tested is a guess. The ADR keeps the reasons for when you or Stefanos come back to this later.
 
 - [ ] From inside `axol-llama`, any attempt to reach the internet fails.
-- [ ] From inside `axol-harness`, your home folder isn't visible. Only `/data` and the app are.
+- [ ] From inside `axol-harness`, your home folder isn't visible. Only `/data`, `/workspace` and the app are.
 - [ ] `:8000` isn't reachable from another device on your network.
 - [ ] Neither image contains `.env` or user data (repeat the 1.3 check on the final images).
 - [ ] Remove both containers, bring them back up, and everything is still there.

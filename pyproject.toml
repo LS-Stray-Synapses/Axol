@@ -14,3 +14,9 @@ dependencies = [
     "openai>=3.46.0",
     "pydantic>=2.14.3"
 ]
+
+[tool.pytest.ini_options]
+# Tests live in tests/; the repo root goes on the import path so
+# `from modules.settings import ...` works no matter where pytest starts.
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -8,7 +8,7 @@ tags: [design, security]
 
 > Roadmap design for making Axol **robust and safer** without losing what makes it Axol: a harness that can change its own loop, models and UI as it goes (the idea we like in the [DeepSeek harness](../../Research/DeepSeek%20harness.md), concept only, no dsh code).
 >
-> Lenos builds every step; Claude teaches, without handing over code. This document is the map. Each project gets its own teaching plan, one feature at a time.
+> This document is the map. Each project gets its own teaching plan, one feature at a time.
 
 ## 1. Intent
 
@@ -269,7 +269,7 @@ What you have when it's done: `docker compose up` (later the app) starts Axol in
 | 1.7 | **Ready signal.** The harness can tell whether the model is ready yet, and the UI shows "model loading" instead of failing. | Groundwork for the app's loading screen. |
 | 1.8 | **Prove it.** A short checklist: llama.cpp can't reach the internet; the harness can't see files outside its volumes; killing a container and starting it again loses nothing; the image has no secrets. | Every item checked and written into the vault. |
 
-**Project 1 calls (Claude's, change them if you disagree):**
+**Project 1 defaults (change them if you disagree):**
 - The `fetch` MCP server is **off** in project 1, so internet and files don't meet in one agent before sandboxes exist. `time` stays on, since it needs no network.
 - Ollama models are left out of the containers for now. They come back as a GPU-server backend in project 4.
 - Data uses bind mounts into a clear folder on the host (easy to see and back up) rather than anonymous volumes.

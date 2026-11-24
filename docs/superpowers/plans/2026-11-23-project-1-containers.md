@@ -1,6 +1,6 @@
 # Project 1: Containers (teaching plan)
 
-> **How this plan is used:** Lenos builds every step. Claude teaches each lesson (the concepts, why it matters for security, what to decide) and reviews the result, but does not write the code or config. Work one lesson at a time and tick the boxes as you go.
+> **How this plan is used:** one lesson at a time. Each lesson covers the concepts, why it matters for security, and what to decide, then the build and its checks. Tick the boxes as you go.
 
 **Goal:** Axol runs in two rootless containers, llama.cpp on the GPU and harness + built UI, with all data on the host, nothing running as your user, and llama.cpp unable to reach the internet.
 

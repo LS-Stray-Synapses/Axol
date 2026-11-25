@@ -28,3 +28,9 @@ web/playwright-report/
 
 # Per-conversation model history (mock_server.py → modules/sessions.py)
 sessions/
+
+# The user's personal data in dev mode: files the agent works on, and what it
+# remembers about you. In containers these live outside the repo
+# (~/Axol-workspace, ~/.local/share/axol), but never commit them here either.
+workspace/
+memory.md

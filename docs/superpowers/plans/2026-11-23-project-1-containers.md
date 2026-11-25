@@ -132,13 +132,15 @@
 - `deploy/harness/mcp_server.json` lists only `time`, launched by its installed command, not `uvx`.
 - Image name: `axol-harness`.
 
-- [ ] Write `.containerignore`.
-- [ ] Write the Containerfile, build it, and run it alone with `AXOL_DATA_DIR` pointed at a temporary mount.
-- [ ] **Check:** the UI loads at `http://127.0.0.1:8000`. The Tools tab shows `time` and the file tools, not `fetch`.
-- [ ] **Check (review focus 4):** list the files inside the image. No `.env`, `sessions/`, `memory.md`, `.venv`, `node_modules` or `docs/`. The process user is not root.
-- [ ] Note the image size. Then commit.
+- [x] Write `.containerignore`.
+- [x] Write the Containerfile, build it, and run it alone with `AXOL_DATA_DIR` pointed at a temporary mount.
+- [x] **Check:** the UI loads at `http://127.0.0.1:8000`. The Tools tab shows `time` and the file tools, not `fetch`.
+- [x] **Check (review focus 4):** list the files inside the image. No `.env`, `sessions/`, `memory.md`, `.venv`, `node_modules` or `docs/`. The process user is not root.
+- [x] Note the image size. Then commit.
 
 **Pitfall:** with no model running, a chat message errors here. That's expected until 1.5.
+
+**Results (2026-11-25):** image 197 MB, runs as `axol` (uid/gid 10001, fixed so they can be mapped), no Node, no data, no secrets. The container's settings are baked in as `ENV` defaults (`/data`, `/workspace`, the time-only MCP config, no Ollama), and compose can override them. Agent tools: the file tools, `save_memory` and `time`'s three tools, no `fetch`. **Found early for 1.5:** with a plain bind mount the container user can't write (`CANNOT WRITE`); with `--userns=keep-id:uid=10001,gid=10001` it can, and the files belong to `lenos` on the host.
 
 ### Lesson 1.4: The llama.cpp image (two parts)
 

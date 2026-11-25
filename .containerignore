@@ -6,6 +6,7 @@
 !modules
 !plugins
 !requirements.txt
+!deploy/harness/mcp_server.json
 
 # The UI's source, built inside the image (stage 1)
 !web/

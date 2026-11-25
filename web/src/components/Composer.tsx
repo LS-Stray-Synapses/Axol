@@ -8,9 +8,12 @@ export function Composer() {
   const connected = useStore((s) => s.connection === "open");
   const models = useStore((s) => s.models ?? []);
   const selectedModel = useStore((s) => s.selectedModel ?? "");
+  const modelState = useStore((s) => s.modelStatus?.[s.selectedModel]);
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
-  const disabled = running || !connected;
+  // Models the server doesn't report on (Ollama) have no state: never block them.
+  const modelNotReady = modelState !== undefined && modelState !== "ready";
+  const disabled = running || !connected || modelNotReady;
 
   useEffect(() => {
     const el = box.current;
@@ -36,6 +39,13 @@ export function Composer() {
 
   return (
     <div className="border-t border-border bg-panel px-4 py-3">
+      {connected && modelNotReady && (
+        <p data-model-status={modelState} className="mx-auto mb-2 max-w-3xl text-sm text-muted">
+          {modelState === "loading"
+            ? "Waking the model… it can answer in a few seconds."
+            : "The model server isn't reachable yet. Axol keeps trying."}
+        </p>
+      )}
       <div className="mx-auto flex max-w-3xl items-end gap-2">
         <Slot name="composer.actions" max={2} menuPlacement="up" className="flex items-center gap-1 pb-1.5" />
 
@@ -66,7 +76,9 @@ export function Composer() {
           placeholder={
             !connected
               ? "Not connected…"
-              : running
+              : modelNotReady
+                ? "Waiting for the model…"
+                : running
                 ? "Agent is working…"
                 : "Message (Enter to send, Shift+Enter for newline)"
           }

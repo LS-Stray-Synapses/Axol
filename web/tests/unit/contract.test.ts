@@ -17,6 +17,9 @@ describe("contract validation", () => {
     { type: "operation_result", request_id: "r", ok: false, error: "nope" },
     { type: "plugin_loaded", name: "p", ui_url: "/plugins/p/ui.js" },
     { type: "plugin_unloaded", name: "p" },
+    { type: "model_status", model: "bonsai-2:27b", state: "loading" },
+    { type: "model_status", model: "bonsai-2:27b", state: "ready" },
+    { type: "model_status", model: "bonsai-2:27b", state: "unreachable" },
   ])("accepts $type", (event) => {
     expect(parseServerEvent(event)).toEqual({ ok: true, event });
   });
@@ -28,6 +31,8 @@ describe("contract validation", () => {
     [{ type: "nope" }, "unknown event type 'nope'"],
     [{ type: "text" }, "field 'text'"],
     [{ type: "status", state: "sleeping" }, "field 'state'"],
+    [{ type: "model_status", model: "m", state: "asleep" }, "field 'state'"],
+    [{ type: "model_status", state: "ready" }, "field 'model'"],
     [{ type: "tool_call", id: "1", name: "x", args: [] }, "field 'args'"],
     [{ type: "tool_result", id: "1", name: "x", is_error: false }, "field 'result'"],
     [{ type: "done", usage: { input_tokens: "1" } }, "field 'usage'"],

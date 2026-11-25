@@ -24,6 +24,7 @@ import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from modules.settings import load_settings
 from modules.origins import origin_allowed
+from modules.model_status import UNREACHABLE, classify_health, health_url, probe
 
 SETTINGS = load_settings()
 
@@ -37,8 +38,9 @@ SESSIONS = SessionStore(SETTINGS.data_dir / "sessions")
 
 WORKSPACE.mkdir(exist_ok=True, parents=True)
 
+LLAMA_MODEL = "bonsai-2:27b"  # the model served by llama.cpp at SETTINGS.llama_url
 MODELS: dict[str, ModelConfig] = {
-    "bonsai-2:27b": ModelConfig(host=SETTINGS.llama_url, model="bonsai-2:27b"),
+    LLAMA_MODEL: ModelConfig(host=SETTINGS.llama_url, model=LLAMA_MODEL),
 }
 if SETTINGS.ollama_url:
     MODELS["qwen3.5:4b"] = ModelConfig(host=SETTINGS.ollama_url, api_key="ollama", model="qwen3.5:4b")
@@ -81,10 +83,34 @@ def build_agent() -> Agent:
         messages=messages
     )
 
+# Every connected browser, so a change in the model's readiness reaches all of them.
+CLIENTS: set["Turn"] = set()
+
+
+def model_status_event() -> dict:
+    return {"type": "model_status", "model": LLAMA_MODEL, "state": app.state.model_state}
+
+
+async def watch_model(interval: float = 2.0) -> None:
+    """Ask llama.cpp's /health every few seconds; tell the browsers when it changes."""
+    url = health_url(SETTINGS.llama_url)
+    while True:
+        state = classify_health(await probe(url))
+        if state != app.state.model_state:
+            print(f"  [model] {LLAMA_MODEL}: {app.state.model_state} -> {state}")
+            app.state.model_state = state
+            for t in list(CLIENTS):
+                with contextlib.suppress(Exception):
+                    await t.send(model_status_event())
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.exit_stack = AsyncExitStack()
     await app.state.exit_stack.__aenter__()
+    app.state.model_state = UNREACHABLE
+    watcher = asyncio.create_task(watch_model())
     try:
         app.state.agent = build_agent()
         app.state.local_tools = app.state.agent.local_tools
@@ -92,6 +118,7 @@ async def lifespan(app: FastAPI):
         await app.state.mcp_tools.connect_mcp(app.state.exit_stack)
         yield
     finally:
+        watcher.cancel()
         if hasattr(app.state, "exit_stack"):
             await app.state.exit_stack.__aexit__(None, None, None)
 
@@ -472,6 +499,8 @@ async def ws_endpoint(ws: WebSocket):
     })
     
     t = Turn(ws)
+    await t.send(model_status_event())
+    CLIENTS.add(t)
     try:
         while True:
             try:
@@ -516,6 +545,7 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        CLIENTS.discard(t)
         if t.task and not t.task.done():
             t.task.cancel()
 
@@ -527,6 +557,13 @@ async def answer_operation(t: Turn, msg: dict) -> None:
         await t.send({"type": "operation_result", "request_id": request_id, "ok": True, "result": result})
     except Exception as e:
         await t.send({"type": "operation_result", "request_id": request_id, "ok": False, "error": str(e)})
+
+
+@app.get("/health")
+async def health() -> dict:
+    """Liveness for the container health check: the harness is up. Whether the
+    model is ready is a separate question, answered by the model_status event."""
+    return {"ok": True}
 
 
 # Plugins: plain JS files the browser import()s.

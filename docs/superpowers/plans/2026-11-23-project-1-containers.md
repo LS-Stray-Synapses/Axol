@@ -149,9 +149,17 @@
 **Learn first:** CUDA base vs runtime images · GPU compute architecture (the RTX 5060 is Blackwell, `sm_120`) · read-only mounts · pinning an image by digest, not by tag · health checks (`llama-server` has `/health`, which answers "not ready" while the model loads).
 
 **1.4a: Official prebuilt image** (learn the moving parts before building your own)
-- [ ] Pull the official llama.cpp CUDA server image and **pin it by digest**.
-- [ ] Run it rootless with the GPU, `~/Models/Bonsai-27B` mounted read-only, the Q2_0 model, `-c 8192`, `--jinja`, alias `bonsai-2:27b`, and no network except a port for testing.
-- [ ] **Check:** `/health` goes from "loading" to "ok". Speed is close to the official Q2_0 numbers in `~/llama/RESULTS.md` (about 24 tok/s, 60/64 layers).
+- [x] Pull the official llama.cpp CUDA server image and **pin it by digest**.
+- [x] Run it rootless with the GPU, `~/Models/Bonsai-27B` mounted read-only, the Q2_0 model, `-c 8192`, `--jinja`, alias `bonsai-2:27b`, and no network except a port for testing.
+- [x] **Check:** `/health` goes from "loading" to "ok". Speed is close to the official Q2_0 numbers in `~/llama/RESULTS.md` (about 24 tok/s, 60/64 layers).
+
+**1.4a results (2026-11-25):**
+- Image `ghcr.io/ggml-org/llama.cpp:server-cuda-b12723` (CUDA 12.8, the newest that fits driver 595 / CUDA 13.2; `server-cuda13-*` is CUDA 13.5, too new). 4.4 GB on disk, a 16-minute download.
+- **Pinned:** `ghcr.io/ggml-org/llama.cpp@sha256:2855fd7d0f5781e289a8108c3abd0744d19621314641b97421c038be836ed373`. This is the digest of the multi-arch list; the amd64 image inside it is `sha256:76412d93…`, and either one pins it.
+- The image has no `USER` (it runs as root by default), so it's run with `--user 10001:10001`.
+- `/models` is mounted `:ro`; a write fails with "Read-only file system".
+- Healthy within ~5 s. Q2_0, `-ngl 60 -np 1 -fa on -c 8192`: **~20 tok/s** generation, against 24.3 for the local official build. Close enough for an image we didn't build.
+- **Still open, for 1.5:** with Podman's default network, the container reaches the internet (HTTP 200 from example.com). The internal network in 1.5 removes that.
 
 **1.4b: Build the prism fork yourself** (your fastest setup)
 - [ ] `deploy/llama/Containerfile`: a CUDA *devel* stage builds the fork with architecture `120`. A CUDA *runtime* stage gets only the built binaries and libraries it needs, runs as a non-root user, and has a health check on `/health`.

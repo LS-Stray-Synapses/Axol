@@ -255,7 +255,7 @@ Each project ships something usable and is taught as its own step-by-step plan. 
 
 **Ongoing, every project:** the threat model (§5.3, item 10) is written at the end of project 1 and updated at the end of each project after that. Supply-chain pinning (item 5) applies from the first image.
 
-### Project 1: Containers (detailed, next up)
+### Project 1: Containers ✅ done 2026-11-25 (see [Containers](../../Architecture/Containers.md), [ADR-0005](../../Decisions/ADR-0005-containers.md))
 
 What you have when it's done: `docker compose up` (later the app) starts Axol in two containers, with data that survives, the model on the GPU, and nothing running as your user.
 

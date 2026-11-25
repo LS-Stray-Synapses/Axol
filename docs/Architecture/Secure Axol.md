@@ -21,11 +21,13 @@ flowchart LR
     S["Improves itself<br/>under<br/>guard rails"]
     A["An app<br/>anyone can<br/>install"]
     T --> C --> U --> S --> A
+    classDef done stroke:#5cb85c,stroke-width:3px
     classDef here stroke:#e8a33d,stroke-width:3px
-    class C here
+    class C done
+    class U here
 ```
 
-*The highlighted step is where we are now.*
+*Green: done. Orange: next.* What we defend against today is in the [Threat Model](Threat%20Model.md).
 
 ## The one big idea
 
@@ -154,8 +156,8 @@ flowchart TB
 
 | # | Project | What you get |
 |---|---|---|
-| 1 | **Containers** ← *we are here* | Axol runs in two locked boxes, with your data safe outside them |
-| 2 | People and logins | you and Stefanos, each with your own space |
+| 1 | **Containers** ✅ *done*, see [Containers](Containers.md) | Axol runs in two locked boxes, with your data safe outside them |
+| 2 | **People and logins** ← *next* | you and Stefanos, each with your own space |
 | 3 | Job sandboxes | every job in its own clean room, with undo |
 | 4 | GPU server | Axol picks and swaps models, and later runs several at once |
 | 5 | Watchdog and recovery | stuck jobs get caught, crashed jobs resume, backups exist |
@@ -163,6 +165,6 @@ flowchart TB
 | 7 | The app | click an icon and it just works, on your machine or connected to a server |
 
 > [!warning] Not yet true
-> This note describes where we're going. Today Axol has no logins, and every chat can reach the same files. The road above is how we get from here to there.
+> This note describes where we're going. Today Axol runs in locked containers ([Containers](Containers.md)), but it has no logins yet, and every chat reaches the same files. The road above is how we get from here to there.
 
 Back to [Overview](Overview.md)

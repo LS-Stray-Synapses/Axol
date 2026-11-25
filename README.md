@@ -93,29 +93,36 @@ python3 -m venv .venv
 cd web && npm ci && cd ..
 ```
 
-**Download Bonsai**
+**Download Bonsai** (PQ2_0 needs the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp); Q2_0 also runs on stock llama.cpp)
 ```bash
-hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-Q2_0.gguf --local-dir ~/Models/Bonsai-27B
+hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf --local-dir ~/Models/Bonsai-27B
 ```
 
-**Run it** (three terminals, both from the repo root):
+### Run it in containers (recommended)
+
+Two rootless Podman containers, the model and the harness + UI, with no internet access and your data kept outside them. Setup (NVIDIA Container Toolkit, folders) and the reasons behind each choice are in [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
+
 ```bash
-# llama.cpp launch 
-llama-server \
-    -m ~/Models/Bonsai-27B/Ternary-Bonsai-2-27B-Q2_0.gguf \
-    --host 127.0.0.1 \
-    --port 8080 \
-    -ngl 99 \
-    -c 8192 \
-    --jinja \
-    --alias bonsai-2:27b
+mkdir -p ~/Axol-workspace ~/.local/share/axol   # your files, and Axol's chats + memory
+podman-compose up -d --build                    # first build: ~5.6 GB download, ~6 min compile
+# → http://127.0.0.1:8000     (podman-compose ps / logs -f / down)
+```
+
+### Run it for development (three terminals, from the repo root)
+
+```bash
+# llama.cpp (here the PrismML fork); -np 1 -fa on are needed to fit 8 GB of VRAM
+llama-server -m ~/Models/Bonsai-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf \
+    --host 127.0.0.1 --port 8080 -ngl 99 -np 1 -fa on -c 8192 --jinja --alias bonsai-2:27b
 .venv/bin/uvicorn mock_server:app --port 8000 --reload   # prototype harness
 cd web && npm run dev                                     # UI → http://localhost:5173
 ```
 
+Settings come from `AXOL_*` environment variables, with defaults for this setup (`modules/settings.py`).
+
 Select an available model in the composer and send a message. Thinking, answer text, tool calls, and tool results stream through the browser event contract.
 
-**Checks** (from `web/`): `npm run typecheck`, `npm test` (unit), `npm run e2e` (end-to-end; first time: `npx playwright install chromium`).
+**Checks:** `.venv/bin/pip install -r requirements-dev.txt`, then `.venv/bin/python -m pytest` (Python). From `web/`: `npm run typecheck`, `npm test` (unit), `npm run e2e` (end-to-end; first time: `npx playwright install chromium`).
 
 ### Repo layout
 
@@ -123,6 +130,8 @@ Select an available model in the composer and send a message. Thinking, answer t
 web/              React + TypeScript UI   (web/src/contract.ts = the event contract)
 plugins/          UI plugins the server can load at runtime (plain JS, no build)
 mock_server.py    prototype FastAPI/WebSocket runtime adapter
+compose.yaml      the two containers (model + harness); deploy/ holds their Containerfiles
+tests/            Python tests (pytest)
 modules/          Python tool + model + agent runtime layer
 docs/             design notes (Obsidian vault)
 requirements.txt  pinned Python deps

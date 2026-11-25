@@ -37,3 +37,4 @@ The project is still a prototype, but the architecture is already concrete enoug
 3. [Front end / harness protocol](Architecture/Front%20end.md)
 4. [How we work in this vault](Contributing.md)
 5. [Secure Axol](Architecture/Secure%20Axol.md): where the project is going, in plain words
+6. [Running Axol in containers](Architecture/Containers.md): how, and why each part is the way it is

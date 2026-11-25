@@ -190,13 +190,13 @@
 - `axol-harness`: `127.0.0.1:8000:8000`, `~/.local/share/axol` mounted at `/data`, `~/Axol-workspace` mounted at `/workspace`, env from `.env`, starts after llama is healthy, restart `unless-stopped`.
 - Rootless ownership: use `keep-id` (or an equivalent UID mapping), so files the container writes belong to `lenos` on the host.
 
-- [ ] Create `~/.local/share/axol/` and `~/Axol-workspace/`. Copy in your current `memory.md` and `workspace/` files if you want to keep them.
-- [ ] Write `compose.yaml` and `.env.example`.
-- [ ] Bring it up, open the UI, chat, save a memory.
-- [ ] **Check (review focus 2):** the new session file on the host belongs to `lenos`.
-- [ ] **Check (review focus 5):** take both containers down and remove them, bring them back up, and the conversation and memory are still there.
-- [ ] **Check (review focus 1):** `:8000` answers on `127.0.0.1` but not on your machine's LAN/VPN address.
-- [ ] Commit.
+- [x] Create `~/.local/share/axol/` and `~/Axol-workspace/`. Copy in your current `memory.md` and `workspace/` files if you want to keep them.
+- [x] Write `compose.yaml` and `.env.example`.
+- [x] Bring it up, open the UI, chat, save a memory.
+- [x] **Check (review focus 2):** the new session file on the host belongs to `lenos`.
+- [x] **Check (review focus 5):** take both containers down and remove them, bring them back up, and the conversation and memory are still there.
+- [x] **Check (review focus 1):** `:8000` answers on `127.0.0.1` but not on your machine's LAN/VPN address.
+- [x] Commit.
 
 ### Lesson 1.6: Hardening
 
@@ -206,9 +206,9 @@
 
 **Decisions locked:** both services get all capabilities dropped, `no-new-privileges`, a read-only root filesystem, `tmpfs` for `/tmp`, and a `pids` limit. Harness: memory and CPU limits sized from what you see it use. llama.cpp: memory limit sized to the model plus headroom.
 
-- [ ] Add one restriction at a time, and restart after each one, so you know which restriction broke something.
-- [ ] **Check:** everything from 1.5 still works. Show each restriction is active (inspect the running container; try writing outside `/data` and `/tmp` inside the harness, and it fails).
-- [ ] Commit.
+- [x] Add one restriction at a time, and restart after each one, so you know which restriction broke something.
+- [x] **Check:** everything from 1.5 still works. Show each restriction is active (inspect the running container; try writing outside `/data` and `/tmp` inside the harness, and it fails).
+- [x] Commit.
 
 ### Lesson 1.7: Ready signal
 
@@ -222,27 +222,35 @@
 - New server event in `web/src/contract.ts`: `{ type: "model_status"; state: "loading" | "ready" | "unreachable" }`. It's sent on connect and whenever the state changes, and added to `SERVER_CHECKS`.
 - The UI shows a banner while the state isn't `ready`, and the send button is disabled.
 
-- [ ] Write `tests/test_model_status.py` first, against a small function `classify_health(status_code: int | None) -> str`:
+- [x] Write `tests/test_model_status.py` first, against a small function `classify_health(status_code: int | None) -> str`:
   - `200` gives `"ready"`
   - `503` gives `"loading"`
   - `None` (connection refused) gives `"unreachable"`
-- [ ] Add a unit test in `web/tests/unit/contract.test.ts`: a valid `model_status` event passes the checks, and an unknown `state` is rejected.
-- [ ] Implement, then watch both test suites pass.
-- [ ] **Check (review focus 3):** restart only `axol-llama` while the UI is open. The banner shows "loading" and then goes away, and nothing errors.
-- [ ] Commit, and tell Stefanos (it's a contract change).
+- [x] Add a unit test in `web/tests/unit/contract.test.ts`: a valid `model_status` event passes the checks, and an unknown `state` is rejected.
+- [x] Implement, then watch both test suites pass.
+- [x] **Check (review focus 3):** restart only `axol-llama` while the UI is open. The banner shows "loading" and then goes away, and nothing errors.
+- [x] Commit, and tell Stefanos (it's a contract change).
 
 ### Lesson 1.8: Prove it, write it down
 
 **Why:** security you haven't tested is a guess. The ADR keeps the reasons for when you or Stefanos come back to this later.
 
-- [ ] From inside `axol-llama`, any attempt to reach the internet fails.
-- [ ] From inside `axol-harness`, your home folder isn't visible. Only `/data`, `/workspace` and the app are.
-- [ ] `:8000` isn't reachable from another device on your network.
-- [ ] Neither image contains `.env` or user data (repeat the 1.3 check on the final images).
-- [ ] Remove both containers, bring them back up, and everything is still there.
-- [ ] Write `docs/Decisions/ADR-0005-containers.md`: what was chosen in 1.1 to 1.7, why, the known gap (the harness can still reach the internet; closed in project 3), and this checklist with results.
-- [ ] Write the first one-page threat model, `docs/Architecture/Threat Model.md`: who or what we defend against, and which part of the design stops each one (design §5.3, item 10).
-- [ ] Update `README.md`'s "Run it" section with the container way, keeping the dev way.
-- [ ] Commit.
+- [x] From inside `axol-llama`, any attempt to reach the internet fails.
+- [x] From inside `axol-harness`, your home folder isn't visible. Only `/data`, `/workspace` and the app are.
+- [x] `:8000` isn't reachable from another device on your network.
+- [x] Neither image contains `.env` or user data (repeat the 1.3 check on the final images).
+- [x] Remove both containers, bring them back up, and everything is still there.
+- [x] Write `docs/Decisions/ADR-0005-containers.md`: what was chosen in 1.1 to 1.7, why, the known gap (the harness can still reach the internet; closed in project 3), and this checklist with results.
+- [x] Write the first one-page threat model, `docs/Architecture/Threat Model.md`: who or what we defend against, and which part of the design stops each one (design §5.3, item 10).
+- [x] Update `README.md`'s "Run it" section with the container way, keeping the dev way.
+- [x] Commit.
+
+**Results 1.5–1.8 (2026-11-25):** see [Containers](../../Architecture/Containers.md) ("Proven") and [ADR-0005](../../Decisions/ADR-0005-containers.md). Changes from the plan:
+- **One internal network for both.** A published port works on an `internal: true` network, so the harness has no internet either. The "known gap" closed early.
+- The harness starts right after the model, without waiting for it to be healthy. The UI shows "waking the model…" (1.7) instead.
+- `x-podman: in_pod: false`, because a pod forbids per-container `keep-id`.
+- Podman storage pinned in `~/.config/containers/storage.conf`: the VSCodium snap's `XDG_DATA_HOME` had moved it, and the health-check timers (systemd) couldn't find the containers.
+- Folders are fixed `${HOME}` paths, because podman-compose can't nest `${A:-${HOME}/…}`. The port and model file come from `.env`.
+- The `model_status` event carries the model's name, so models the server doesn't watch (Ollama in dev) are never blocked.
 
 **When 1.8 is done, project 1 is done.** Next is either project 2 (people and logins) or project 7 (the app) if you want the nice start sooner.

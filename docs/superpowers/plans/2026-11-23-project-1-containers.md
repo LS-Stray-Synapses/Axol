@@ -70,12 +70,12 @@
 
 **Decisions locked:** rootless Podman. GPU through NVIDIA Container Toolkit + a CDI spec. Leave the `docker` and `lxd` groups unless something you use needs them (you decide after the lesson).
 
-- [ ] Install the NVIDIA Container Toolkit from NVIDIA's apt repository.
-- [ ] Generate the CDI spec for your GPU and list the devices it found.
-- [ ] Run a throwaway CUDA base container, rootless, with the GPU device, that runs `nvidia-smi`.
-- [ ] Decide about the `docker` and `lxd` groups and the unused `docker.io` package. Write down why.
-- [ ] **Check:** inside the container, `nvidia-smi` shows the RTX 5060. `podman info` reports rootless `true`.
-- [ ] Note in the vault what you installed and why (it goes into the ADR in 1.8).
+- [x] Install the NVIDIA Container Toolkit from NVIDIA's apt repository.
+- [x] Generate the CDI spec for your GPU and list the devices it found.
+- [x] Run a throwaway CUDA base container, rootless, with the GPU device, that runs `nvidia-smi`.
+- [x] Decide about the `docker` and `lxd` groups and the unused `docker.io` package. Write down why.
+- [x] **Check:** inside the container, `nvidia-smi` shows the RTX 5060. `podman info` reports rootless `true`.
+- [x] Note in the vault what you installed and why (it goes into the ADR in 1.8).
 
 **Pitfalls:** the CDI spec has to be regenerated after a driver update, or the GPU silently disappears from containers. The CUDA version in an image must not be newer than what driver 595 supports.
 
@@ -97,15 +97,15 @@
 
 `modules/settings.py` holds one function, `load_settings() -> Settings`, where `Settings` is a small frozen dataclass or pydantic model with `llama_url: str`, `ollama_url: str | None`, `data_dir: Path`, `workspace_dir: Path`, `mcp_config: Path`. `mock_server.py` builds `WORKSPACE`, `MEMORY_FILE`, `SESSIONS`, `MCP_CONFIG` and `MODELS` from it. `PLUGINS_DIR` and `DIST_DIR` stay relative to the code, because they're part of the app, not data.
 
-- [ ] Add `requirements-dev.txt` with a pinned `pytest`, and install it into `.venv`.
-- [ ] Write `tests/test_settings.py` first:
+- [x] Add `requirements-dev.txt` with a pinned `pytest`, and install it into `.venv`.
+- [x] Write `tests/test_settings.py` first:
   - `test_defaults_match_today`: with no env vars set, the URLs equal today's values, `data_dir` is the repo root and `workspace_dir` is the repo's `workspace/`.
   - `test_env_overrides`: with all five vars set, each field equals the var.
   - `test_empty_ollama_disables_it`: `AXOL_OLLAMA_URL=""` gives `ollama_url is None`.
-- [ ] Run the tests and watch them fail. Then write `load_settings`, then watch them pass.
-- [ ] Wire `mock_server.py` to use it. When `ollama_url` is `None`, the Qwen entries aren't added to `MODELS`.
-- [ ] **Check:** the normal three-terminal setup still works end to end (send a message, get an answer, memory still loads).
-- [ ] Commit, and tell Stefanos.
+- [x] Run the tests and watch them fail. Then write `load_settings`, then watch them pass.
+- [x] Wire `mock_server.py` to use it. When `ollama_url` is `None`, the Qwen entries aren't added to `MODELS`.
+- [x] **Check:** the normal three-terminal setup still works end to end (send a message, get an answer, memory still loads).
+- [x] Commit, and tell Stefanos.
 
 ### Lesson 1.3: The harness image
 

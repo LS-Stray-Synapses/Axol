@@ -277,8 +277,11 @@ What you have when it's done: `docker compose up` (later the app) starts Axol in
 - Day-to-day development stays as today (Vite + `uvicorn --reload` outside containers). Containers are how Axol *runs*, not how it's edited.
 - Each step is written down as a vault note or ADR as it's finished.
 
+### Project 1b: Easy anywhere ✅ done 2026-11-25
+`./axol` (setup, doctor, start, stop, status, logs, rebuild, autostart). It checks the machine, writes `.env` per machine (folders, port, GPU, CUDA architecture detected, context size), pins Podman storage when a snap moves it, and starts Axol at boot through a systemd user service with lingering. Proven on the laptop; the RTX 5080 server (same `sm_120` architecture, 16 GB) is the next install.
+
 ### Project 2: People and permissions
-Admin-created accounts (no sign-up page), login with a proven library, a cookie session over the VPN. Per-user folders for workspace, memory and conversations. Conversations stored server-side and tied to a user (ADR-0004 follow-up). Model choice belongs to the conversation, not the process. Roles: admin and user. The data model has owner + members ready for sharing. The harness is published on the VPN interface only. Login rate limits and session expiry. **Gate: no second user until the file tools are confined to the user's own folder** (the `../` hole in `local_tools.py`), because before project 3 every user's tools still run in one harness. Memory per user, with a source on every entry. Logs visible per user, with retention.
+**An account is always required, even for one person on one machine (Lenos, 2026-11-25).** There's no login-free local mode, so nobody can expose Axol without a lock by accident, and the same code path runs everywhere. Admin-created accounts (no sign-up page). The first admin is created during setup. login with a proven library, a cookie session over the VPN. Per-user folders for workspace, memory and conversations. Conversations stored server-side and tied to a user (ADR-0004 follow-up). Model choice belongs to the conversation, not the process. Roles: admin and user. The data model has owner + members ready for sharing. The harness is published on the VPN interface only. Login rate limits and session expiry. **Gate: no second user until the file tools are confined to the user's own folder** (the `../` hole in `local_tools.py`), because before project 3 every user's tools still run in one harness. Memory per user, with a source on every entry. Logs visible per user, with retention.
 
 ### Project 3: Job sandboxes
 A job-runner interface inside the harness; tool running moves behind it. Permission lists (profiles). The launcher service. A sandbox image. Files profile (no network) and internet profile (egress filter). Auto-split researcher → file job with visible handoff text. Per-job limits. Checkpoints, history/trash and "undo this job". The append-only audit log, plus a UI to read it. Job records and per-step logging (§7.1). Delegation only narrows. Internet-tainted jobs can't write memory. Secret broker.
@@ -308,6 +311,9 @@ App window with a loading screen. Connect-to-server or run-locally modes. Contai
 - Keep dsh-style evolution, including the UI, made robust and safe.
 - Jobs survive restarts and resume without repeating side effects (§7.1).
 - The ten extra guard rails in §5.3.
+- **An account is always required**, even for a single user on one machine (2026-11-25).
+- The repo must be easy for anyone to install: `./axol setup` instead of hand edits (project 1b).
+- The server is a separate machine (RTX 5080 16 GB, 64 GB RAM, Ubuntu) at Lenos's place, woken by Wake-on-LAN, reached over NordVPN Meshnet. The admin can change.
 - Everything stays a plugin, with trust levels: core plugins locked; Axol-written code runs outside the core (§9.1).
 - The app can connect to a server or run locally.
 

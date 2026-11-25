@@ -28,9 +28,10 @@ Axol ran as three processes under the user's own account: the agent and its file
 - **Hardening:** read-only root filesystems, a 64 MB tmpfs `/tmp`, all capabilities dropped, `no-new-privileges`, memory, CPU and process limits.
 - **Readiness:** liveness `/health` for the health checks; a `model_status` event for the UI.
 - **Storage:** Podman's `graphroot` is pinned in `~/.config/containers/storage.conf`, because snap-packaged editors otherwise move it.
+- **Per machine, not per person:** `./axol setup` writes `.env` (paths, port, GPU, detected CUDA architecture, context size), and `compose.yaml` refuses to run without it. `./axol autostart on` adds a systemd user service plus lingering for servers.
 
 ## Consequences
 
 - Positive: proven on 2026-11-25. No internet from either container, the port is unreachable from the LAN, there are no secrets in the images, and the processes are read-only with no capabilities. Data survives a full `down`/`up`. 37.4 tok/s, the same as bare metal.
-- Negative: no web access for the agent until project 3. The first model build downloads ~5.6 GB and compiles for ~6 min. Folders are fixed `${HOME}` paths, because podman-compose can't nest defaults.
+- Negative: no web access for the agent until project 3. The first model build downloads ~5.6 GB and compiles for ~6 min. podman-compose can't nest defaults, so the folders come from `.env`, which `./axol setup` writes.
 - Follow-ups: logins and per-user folders, with file-tool path confinement before a second user (project 2). Job sandboxes and disk quotas (project 3). Systemd user services behind the desktop app (project 7).

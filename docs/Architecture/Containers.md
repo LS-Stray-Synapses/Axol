@@ -35,33 +35,42 @@ flowchart LR
 
 ## Quick start
 
-**Once per machine:**
-1. **Rootless Podman** and `podman-compose`. On Ubuntu: `sudo apt install podman podman-compose`. Rootless is the default.
-2. **NVIDIA Container Toolkit**, from NVIDIA's apt repository. On recent versions the GPU description (CDI) is generated and refreshed automatically. Check it with `nvidia-ctk cdi list`.
-3. **Pin Podman's storage**, if you ever run Podman from an editor installed as a snap (VSCodium, VS Code snap). Put this in `~/.config/containers/storage.conf`, with your own user name and number:
-   ```toml
-   [storage]
-   driver = "overlay"
-   graphroot = "/home/<you>/.local/share/containers/storage"
-   runroot = "/run/user/<uid>/containers"
-   ```
-   The reason is in **Troubleshooting** below.
-4. **Create the two data folders:** `mkdir -p ~/Axol-workspace ~/.local/share/axol`
-5. **Get the model:** `~/Models/Bonsai-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf` (`hf download prism-ml/Ternary-Bonsai-2-27B-gguf …`).
+Everything goes through one command, **`./axol`**, from the repo root. It runs `podman-compose` for you, and it needs only Python 3, which Ubuntu already has.
 
-**Every day**, from the repo root:
+**Once per machine:**
+1. **Install** rootless Podman and podman-compose (`sudo apt install podman podman-compose`), the NVIDIA driver, and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), from NVIDIA's apt repository.
+2. **Get the model:** `hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf --local-dir ~/Models/Bonsai-27B`
+3. **Run `./axol setup`.** It asks a few questions, each with a sensible default (press Enter to accept), and writes **`.env`** for this machine: folders, port, GPU, context size. It **detects the GPU's architecture** by itself. It creates the folders, pins Podman's storage when an editor installed as a snap would otherwise move it, then checks the whole machine and says exactly what to fix.
+4. **Optional, for a server: `./axol autostart on`.** Axol starts whenever the machine boots, even before anyone logs in.
+
+**Every day:**
 
 | Command | Does |
 |---|---|
-| `podman-compose up -d` | start Axol, then open **http://127.0.0.1:8000** |
-| `podman-compose ps` | what's running, and whether it's `(healthy)` |
-| `podman-compose logs -f` | follow both logs |
-| `podman-compose down` | stop and remove the containers. Your data stays |
-| `podman-compose up -d --build` | rebuild the images after changing code. The first model build downloads ~5.6 GB of CUDA images and compiles for ~6 minutes |
+| `./axol start` | start Axol and wait until it's ready, then open the address it prints (**http://127.0.0.1:8000**) |
+| `./axol status` | what's running, and whether it's `(healthy)` |
+| `./axol logs` (or `./axol logs axol-harness`) | follow the logs. **Ctrl+C** stops watching, not Axol |
+| `./axol stop` | stop and remove the containers. Your data stays |
+| `./axol rebuild` | after changing code. The first model build downloads ~5.6 GB and compiles for ~6 min |
+| `./axol doctor` | check the machine again, e.g. after a driver update |
 
-After `up`, the UI says *"Waking the model…"* for a few seconds, then you can chat. Both containers usually report healthy in about 15 seconds.
+After `start`, the UI says *"Waking the model…"* for a few seconds. Both containers are usually healthy in about 15 seconds.
 
 **Developing** stays as before: llama.cpp, `uvicorn --reload` and `npm run dev` in three terminals (see the README). Containers are how Axol *runs*, not how you edit it.
+
+### What `./axol setup` writes (`.env`)
+
+| Setting | Default | Notes |
+|---|---|---|
+| `AXOL_WORKSPACE_PATH` | `~/Axol-workspace` | your files. Never the Desktop or a repo: the agent can write and delete here |
+| `AXOL_DATA_PATH` | `~/.local/share/axol` | chats and memory |
+| `AXOL_MODELS_PATH` / `AXOL_MODEL_FILE` | `~/Models/Bonsai-27B` / `…PQ2_0.gguf` | mounted read-only |
+| `AXOL_PORT` | `8000` | published on `127.0.0.1` only |
+| `AXOL_GPU` | `nvidia.com/gpu=0` | from `nvidia-ctk cdi list` |
+| `AXOL_CUDA_ARCH` | detected (`120` = RTX 50xx, `89` = 40xx, `86` = 30xx) | the model image is compiled for exactly this GPU |
+| `AXOL_CTX_SIZE` | `8192` | fits 8 GB of VRAM. A 16 GB card has room for more |
+
+`compose.yaml` refuses to start without these (*"run ./axol setup first"*), so a missing setting can't turn into a confusing error. `.env` is never committed and never copied into an image.
 
 ---
 
@@ -158,6 +167,7 @@ The fork is compiled as one static binary, for this GPU only (`sm_120a`), **with
 | A CUDA image runs `nvidia-smi` but llama fails with "driver insufficient" | the image's CUDA is newer than the driver supports (`nvidia-smi` shows the maximum) | use a CUDA version ≤ the host's. `nvidia-smi` passes either way, because it comes from the host |
 | Status stuck at `(starting)`. Health timers fail with *"no such container"* | an editor installed as a snap changes `XDG_DATA_HOME`, so Podman uses a different storage folder than systemd | pin `graphroot` in `~/.config/containers/storage.conf` (Quick start, step 3) |
 | `--userns and --pod cannot be set together` | podman-compose puts services in a pod by default | `x-podman: in_pod: false` at the top of `compose.yaml` |
+| `./axol doctor` shows ✗ | the check names what's wrong | follow the `fix:` line under it |
 | `podman exec` says *"unable to find user axol"* | a Podman quirk with read-only containers and user names | `podman exec --user 10001:10001 …` |
 | The harness can't write to `/data` | user mapping, see §6 | `userns_mode: keep-id:uid=10001,gid=10001` |
 | UI shows "Not connected", log says `[ws] refused connection from origin …` | the page's address isn't in `AXOL_ALLOWED_ORIGINS` | add it, or open the UI at `http://127.0.0.1:8000` |
@@ -169,6 +179,6 @@ The fork is compiled as one static binary, for this GPU only (`sm_120a`), **with
 - **Logins.** Anyone who can reach `127.0.0.1:8000` on this machine is "the user". That's project 2, and it's required before the port is opened to the VPN.
 - **Job sandboxes.** The agent's file tools still run inside the harness, and `../` in a filename isn't blocked yet (project 2 gate, project 3).
 - **Disk quotas** for `/data` and `/workspace` (project 2/3). The root filesystems are read-only, so a container can only fill its mounted folders and its 64 MB `/tmp`.
-- **Starting without a terminal.** The desktop app (project 7) will start these same containers, probably as systemd user services.
+- **Starting without a terminal on a desktop.** `./axol autostart on` covers servers. The desktop app (project 7) will add an icon and a loading screen on top of `./axol`.
 
 Back to [Overview](Overview.md)

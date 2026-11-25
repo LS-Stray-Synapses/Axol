@@ -100,12 +100,13 @@ hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf -
 
 ### Run it in containers (recommended)
 
-Two rootless Podman containers, the model and the harness + UI, with no internet access and your data kept outside them. Setup (NVIDIA Container Toolkit, folders) and the reasons behind each choice are in [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
+Two rootless Podman containers, the model and the harness + UI, with no internet access and your data kept outside them. Everything goes through `./axol`. How it works and why: [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
 
 ```bash
-mkdir -p ~/Axol-workspace ~/.local/share/axol   # your files, and Axol's chats + memory
-podman-compose up -d --build                    # first build: ~5.6 GB download, ~6 min compile
-# → http://127.0.0.1:8000     (podman-compose ps / logs -f / down)
+./axol setup        # once: checks this machine, asks a few questions, writes .env
+./axol start        # → http://127.0.0.1:8000   (first time: builds the images)
+./axol status       # / logs / stop / rebuild / doctor
+./axol autostart on # optional, for a server: start when the machine boots
 ```
 
 ### Run it for development (three terminals, from the repo root)
@@ -130,6 +131,7 @@ Select an available model in the composer and send a message. Thinking, answer t
 web/              React + TypeScript UI   (web/src/contract.ts = the event contract)
 plugins/          UI plugins the server can load at runtime (plain JS, no build)
 mock_server.py    prototype FastAPI/WebSocket runtime adapter
+axol              one command to set up / start / stop Axol (deploy/axolctl.py)
 compose.yaml      the two containers (model + harness); deploy/ holds their Containerfiles
 tests/            Python tests (pytest)
 modules/          Python tool + model + agent runtime layer

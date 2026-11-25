@@ -1,0 +1,88 @@
+# Axol in two containers: the model (llama.cpp) and the harness (+ web UI).
+#
+# Use ./axol (setup, start, stop, status, logs, rebuild, autostart). It runs
+# podman-compose for you. The settings below (${AXOL_...}) come from .env,
+# which ./axol setup writes for this machine.
+#
+# Why each line is here: docs/Architecture/Containers.md
+
+name: axol
+
+# podman-compose groups services in a pod by default, and a pod doesn't allow
+# each container its own user mapping (the harness needs keep-id below).
+x-podman:
+  in_pod: false
+
+services:
+  axol-llama:
+    image: localhost/axol-llama:latest
+    build:
+      context: deploy/llama
+      args:
+        CUDA_ARCH: ${AXOL_CUDA_ARCH:-120}      # this machine's GPU (setup detects it)
+    devices:
+      - ${AXOL_GPU:-nvidia.com/gpu=0}          # the GPU, named (CDI)
+    volumes:
+      - ${AXOL_MODELS_PATH:?run ./axol setup first}:/models:ro   # read-only
+    environment:                               # llama-server reads LLAMA_ARG_*
+      LLAMA_ARG_MODEL: /models/${AXOL_MODEL_FILE:?run ./axol setup first}
+      LLAMA_ARG_ALIAS: bonsai-2:27b
+      LLAMA_ARG_N_GPU_LAYERS: "99"             # every layer on the GPU
+      LLAMA_ARG_N_PARALLEL: "1"                # one conversation at a time: 8 GB fits one
+      LLAMA_ARG_FLASH_ATTN: "on"
+      LLAMA_ARG_CTX_SIZE: ${AXOL_CTX_SIZE:-8192}   # 8192 fits 8 GB of VRAM
+      LLAMA_ARG_JINJA: "1"
+    networks: [axol-internal]                  # no internet, no published port
+    healthcheck:                               # no curl in the image: plain bash
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"ok\"' <&3"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    # Hardening (lesson 1.6)
+    # No read_only here: NVIDIA Container Toolkit 1.20's CDI hooks (update-ldcache,
+    # create-symlinks) write the driver's library links into the container's root
+    # filesystem, and fail on a read-only one. The server still runs as user 10001,
+    # which can't write to the root-owned programs, with no capabilities.
+    tmpfs: [/tmp:size=64m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    mem_limit: 12g                             # the model file is 6.8 GB, read into memory
+    pids_limit: 256
+
+  axol-harness:
+    image: localhost/axol-harness:latest
+    build:
+      context: .
+      dockerfile: deploy/harness/Containerfile
+    depends_on: [axol-llama]                   # started after; the UI shows "waking the model…"
+    ports:
+      - 127.0.0.1:${AXOL_PORT:-8000}:8000      # this machine only
+    environment:
+      AXOL_LLAMA_URL: http://axol-llama:8080/v1
+      AXOL_ALLOWED_ORIGINS: http://127.0.0.1:${AXOL_PORT:-8000},http://localhost:${AXOL_PORT:-8000}
+    volumes:
+      - ${AXOL_DATA_PATH:?run ./axol setup first}:/data             # chats, memory
+      - ${AXOL_WORKSPACE_PATH:?run ./axol setup first}:/workspace   # your files
+    userns_mode: keep-id:uid=10001,gid=10001   # files it writes belong to you on the host
+    networks: [axol-internal]                  # published port works; still no internet
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    # Hardening (lesson 1.6)
+    read_only: true
+    tmpfs: [/tmp:size=64m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 128
+
+networks:
+  axol-internal:
+    internal: true                             # no route to the internet or your LAN

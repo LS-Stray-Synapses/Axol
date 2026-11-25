@@ -22,32 +22,29 @@ from modules import LocalTools, MCPTools, ModelConfig, Agent
 from modules.sessions import SessionStore
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
+from modules.settings import load_settings
+from modules.origins import origin_allowed
+from modules.model_status import UNREACHABLE, classify_health, health_url, probe
 
+SETTINGS = load_settings()
 
 ROOT = Path(__file__).parent
-WORKSPACE = ROOT / "workspace"
-MEMORY_FILE = ROOT / "memory.md"
-MCP_CONFIG = ROOT / "mcp_server.json"
+WORKSPACE = SETTINGS.workspace_dir
+MEMORY_FILE = SETTINGS.data_dir / "memory.md"
+MCP_CONFIG = SETTINGS.mcp_config
 PLUGINS_DIR = ROOT / "plugins"
 DIST_DIR = ROOT / "web" / "dist"
-SESSIONS = SessionStore(ROOT / "sessions")  # one model history per conversation
+SESSIONS = SessionStore(SETTINGS.data_dir / "sessions")
 
+WORKSPACE.mkdir(exist_ok=True, parents=True)
+
+LLAMA_MODEL = "bonsai-2:27b"  # the model served by llama.cpp at SETTINGS.llama_url
 MODELS: dict[str, ModelConfig] = {
-    "bonsai-2:27b": ModelConfig(
-        host="http://localhost:8080/v1",
-        model="bonsai-2:27b"
-    ),
-    "qwen3.5:4b": ModelConfig(
-       host="http://localhost:11434/v1",
-        api_key="ollama",
-        model="qwen3.5:4b"
-    ),
-    "qwen3.5:2b": ModelConfig(
-        host="http://localhost:11434/v1",
-        api_key="ollama",
-        model="qwen3.5:2b"
-    )
+    LLAMA_MODEL: ModelConfig(host=SETTINGS.llama_url, model=LLAMA_MODEL),
 }
+if SETTINGS.ollama_url:
+    MODELS["qwen3.5:4b"] = ModelConfig(host=SETTINGS.ollama_url, api_key="ollama", model="qwen3.5:4b")
+    MODELS["qwen3.5:2b"] = ModelConfig(host=SETTINGS.ollama_url, api_key="ollama", model="qwen3.5:2b")
 
 SYSTEM_PROMPT = """You are a helpful personal assistant running inside a \
 custom harness named Axol. Be concise.
@@ -86,10 +83,34 @@ def build_agent() -> Agent:
         messages=messages
     )
 
+# Every connected browser, so a change in the model's readiness reaches all of them.
+CLIENTS: set["Turn"] = set()
+
+
+def model_status_event() -> dict:
+    return {"type": "model_status", "model": LLAMA_MODEL, "state": app.state.model_state}
+
+
+async def watch_model(interval: float = 2.0) -> None:
+    """Ask llama.cpp's /health every few seconds; tell the browsers when it changes."""
+    url = health_url(SETTINGS.llama_url)
+    while True:
+        state = classify_health(await probe(url))
+        if state != app.state.model_state:
+            print(f"  [model] {LLAMA_MODEL}: {app.state.model_state} -> {state}")
+            app.state.model_state = state
+            for t in list(CLIENTS):
+                with contextlib.suppress(Exception):
+                    await t.send(model_status_event())
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.exit_stack = AsyncExitStack()
     await app.state.exit_stack.__aenter__()
+    app.state.model_state = UNREACHABLE
+    watcher = asyncio.create_task(watch_model())
     try:
         app.state.agent = build_agent()
         app.state.local_tools = app.state.agent.local_tools
@@ -97,6 +118,7 @@ async def lifespan(app: FastAPI):
         await app.state.mcp_tools.connect_mcp(app.state.exit_stack)
         yield
     finally:
+        watcher.cancel()
         if hasattr(app.state, "exit_stack"):
             await app.state.exit_stack.__aexit__(None, None, None)
 
@@ -459,6 +481,12 @@ async def operation(t: Turn, name: str, args: dict):
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
+    # Refuse web pages from other sites before accepting (modules/origins.py).
+    origin = ws.headers.get("origin")
+    if not origin_allowed(origin, SETTINGS.allowed_origins):
+        print(f"  [ws] refused connection from origin {origin!r}")
+        await ws.close(code=1008)  # policy violation
+        return
     await ws.accept()
 
     await ws.send_json({
@@ -471,6 +499,8 @@ async def ws_endpoint(ws: WebSocket):
     })
     
     t = Turn(ws)
+    await t.send(model_status_event())
+    CLIENTS.add(t)
     try:
         while True:
             try:
@@ -515,6 +545,7 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        CLIENTS.discard(t)
         if t.task and not t.task.done():
             t.task.cancel()
 
@@ -526,6 +557,13 @@ async def answer_operation(t: Turn, msg: dict) -> None:
         await t.send({"type": "operation_result", "request_id": request_id, "ok": True, "result": result})
     except Exception as e:
         await t.send({"type": "operation_result", "request_id": request_id, "ok": False, "error": str(e)})
+
+
+@app.get("/health")
+async def health() -> dict:
+    """Liveness for the container health check: the harness is up. Whether the
+    model is ready is a separate question, answered by the model_status event."""
+    return {"ok": True}
 
 
 # Plugins: plain JS files the browser import()s.

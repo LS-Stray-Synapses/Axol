@@ -7,7 +7,7 @@
 // there. Mutations go through the exported functions below.
 
 import { create } from "zustand";
-import type { ServerEvent } from "./contract";
+import type { ModelState, ServerEvent } from "./contract";
 import type { Block, ChatMessage, ConnectionState, PluginInfo, PublicState, TurnStats } from "../plugin-api";
 
 export interface ChatState extends PublicState {
@@ -19,6 +19,8 @@ export interface ChatState extends PublicState {
   models: Array<{ name: string; label: string }>;
   /** currently selected model name */
   selectedModel: string;
+  /** readiness of the models the server reports on (model_status), by model name */
+  modelStatus: Record<string, ModelState>;
 }
 
 export const initialState: ChatState = {
@@ -31,6 +33,7 @@ export const initialState: ChatState = {
   cancelRequested: false,
   models: [],
   selectedModel: "",
+  modelStatus: {},
 };
 
 // Messages outlive the page now (conversations are saved in localStorage), so
@@ -83,6 +86,9 @@ export function reduce(state: ChatState, e: ServerEvent): ChatState {
         models: e.models,
         selectedModel: e.selected,
       };
+
+    case "model_status":
+      return { ...state, modelStatus: { ...state.modelStatus, [e.model]: e.state } };
 
     case "status": {
       const running = e.state === "running";

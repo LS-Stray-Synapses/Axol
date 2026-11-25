@@ -23,7 +23,11 @@ export type ServerEvent =
   | { type: "error"; message: string }
   | { type: "operation_result"; request_id: string; ok: boolean; result?: unknown; error?: string }
   | { type: "plugin_loaded"; name: string; ui_url: string }
-  | { type: "plugin_unloaded"; name: string };
+  | { type: "plugin_unloaded"; name: string }
+  // Whether a model server can answer yet: sent on connect and whenever it changes.
+  | { type: "model_status"; model: string; state: ModelState };
+
+export type ModelState = "loading" | "ready" | "unreachable";
 
 export type ServerEventType = ServerEvent["type"];
 export type EventOf<T extends ServerEventType> = Extract<ServerEvent, { type: T }>;
@@ -90,6 +94,7 @@ const SERVER_CHECKS: { [T in ServerEventType]: Record<Exclude<keyof EventOf<T>, 
   operation_result: { request_id: str, ok: bool, result: optional(present), error: optional(str) },
   plugin_loaded: { name: str, ui_url: pluginUrl },
   plugin_unloaded: { name: str },
+  model_status: { model: str, state: oneOf("loading", "ready", "unreachable") },
 };
 
 export type Parsed<T> = { ok: true; event: T } | { ok: false; error: string };

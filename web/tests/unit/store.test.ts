@@ -5,6 +5,14 @@ import { initialState, reduce, type ChatState } from "../../src/store";
 const fold = (events: ServerEvent[], from: ChatState = initialState) => events.reduce(reduce, from);
 
 describe("reduce", () => {
+  it("tracks each model's readiness from model_status", () => {
+    const s = fold([
+      { type: "model_status", model: "bonsai-2:27b", state: "loading" },
+      { type: "model_status", model: "bonsai-2:27b", state: "ready" },
+    ]);
+    expect(s.modelStatus).toEqual({ "bonsai-2:27b": "ready" });
+  });
+
   it("merges streamed text deltas into one assistant message with one block", () => {
     const s = fold([
       { type: "text", text: "Hel" },

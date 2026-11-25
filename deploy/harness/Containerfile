@@ -1,0 +1,46 @@
+# Axol harness image: the Python harness plus the built web UI.
+# Build from the repo root:  podman build -f deploy/harness/Containerfile -t axol-harness .
+# What gets in is decided by .containerignore (deny by default).
+
+# ---- Stage 1: build the UI (thrown away after) ----
+FROM docker.io/library/node:22-slim AS ui
+WORKDIR /web
+# Package lists first: the slow install below is cached until they change.
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+# ---- Stage 2: the harness (this is the image that runs) ----
+FROM docker.io/library/python:3.14-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /app
+
+# Python packages first (cached until requirements.txt changes). The MCP time
+# server is installed here, pinned, instead of being downloaded by uvx at start.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --root-user-action=ignore \
+        -r requirements.txt mcp-server-time==2026.11.18
+
+# The harness code, its container-only MCP config, then the built UI from stage 1.
+COPY mock_server.py ./
+COPY modules/ ./modules/
+COPY plugins/ ./plugins/
+COPY deploy/harness/mcp_server.json ./deploy/harness/
+COPY --from=ui /web/dist ./web/dist
+
+# Run as a plain user, not root.
+# Fixed numbers (not picked by Debian) so lesson 1.5 can map them to your own user.
+RUN groupadd --system --gid 10001 axol \
+ && useradd --system --no-create-home --uid 10001 --gid axol axol
+USER axol
+
+# Settings for the container (lesson 1.2). Data folders are mounted at run time.
+ENV AXOL_DATA_DIR=/data \
+    AXOL_WORKSPACE_DIR=/workspace \
+    AXOL_MCP_CONFIG=/app/deploy/harness/mcp_server.json \
+    AXOL_OLLAMA_URL=
+
+EXPOSE 8000
+CMD ["uvicorn", "mock_server:app", "--host", "0.0.0.0", "--port", "8000"]

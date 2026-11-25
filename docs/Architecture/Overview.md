@@ -84,6 +84,8 @@ sequenceDiagram
 | Evaluation & benchmarks | [Evaluation](Evaluation.md) | planned |
 | Experience recording | [Experience Store](Experience%20Store.md) | planned |
 | Model creation / fine-tuning | [Model Forge](Model%20Forge.md) | later |
+| Security direction | [Secure Axol](Secure%20Axol.md), [Threat Model](Threat%20Model.md) | active |
+| Containers (model + harness) | [Containers](Containers.md), [ADR-0005](../Decisions/ADR-0005-containers.md) | active |
 
 Visual map: [Axol.canvas](Axol.canvas) (open in Obsidian).
 

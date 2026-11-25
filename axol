@@ -1,0 +1,5 @@
+#!/bin/sh
+# Set up, start and stop Axol. Try: ./axol setup, ./axol start, ./axol help
+cd "$(dirname "$0")" || exit 1
+if [ "$1" = "help" ] || [ $# -eq 0 ]; then set -- --help; fi
+exec python3 deploy/axolctl.py "$@"

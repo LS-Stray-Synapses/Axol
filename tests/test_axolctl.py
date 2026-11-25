@@ -148,3 +148,13 @@ def test_known_model_matches_this_setup():
 
     assert url.startswith("https://huggingface.co/prism-ml/")
     assert len(sha) == 64 and size > 7e9
+
+
+def test_rebuild_only_when_an_image_changes():
+    assert axolctl.needs_rebuild(["mock_server.py"])
+    assert axolctl.needs_rebuild(["web/src/store.ts", "README.md"])
+    assert axolctl.needs_rebuild(["deploy/llama/Containerfile"])
+    assert axolctl.needs_rebuild(["compose.yaml"])
+    assert not axolctl.needs_rebuild(["README.md", "docs/Home.md", "tests/test_settings.py"])
+    assert not axolctl.needs_rebuild(["deploy/axolctl.py"])  # the tool itself isn't in an image
+    assert not axolctl.needs_rebuild([])

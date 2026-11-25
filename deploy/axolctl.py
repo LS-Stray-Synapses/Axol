@@ -12,6 +12,7 @@ so it works before anything else is installed.
     ./axol logs [name]  follow the logs (Ctrl+C stops watching, not Axol)
     ./axol rebuild      rebuild the images after changing code, then start
     ./axol model        download the model (resumable) and check its fingerprint
+    ./axol update       get the latest code (git pull) and rebuild only if needed
     ./axol autostart on|off   start Axol when this machine boots
 
 Why each piece exists: docs/Architecture/Containers.md
@@ -115,6 +116,16 @@ def env_text(values: dict[str, str]) -> str:
         lines.append("# Other settings")
         lines += [f"{k}={v}" for k, v in extra.items()]
     return "\n".join(lines).rstrip() + "\n"
+
+
+# Changes under these paths end up inside an image, so they need a rebuild.
+IMAGE_INPUTS = ("deploy/llama/", "deploy/harness/", "web/", "modules/", "plugins/",
+                "mock_server.py", "requirements.txt", ".containerignore", "compose.yaml")
+
+
+def needs_rebuild(changed: list[str]) -> bool:
+    """True when any changed file is part of an image (docs and tests aren't)."""
+    return any(f == p or f.startswith(p) for f in changed for p in IMAGE_INPUTS)
 
 
 def storage_moved(xdg_data_home: str | None, home: Path, storage_conf_exists: bool) -> bool:
@@ -438,6 +449,46 @@ def cmd_rebuild(args) -> int:
     return cmd_start(args)
 
 
+def git(*args: str) -> subprocess.CompletedProcess:
+    return run(["git", "-C", str(REPO), *args], timeout=120)
+
+
+def cmd_update(args) -> int:
+    if git("rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
+        print("This copy of Axol isn't a git checkout, so it can't update itself.")
+        return 1
+    edited = [l for l in git("status", "--porcelain", "--untracked-files=no").stdout.splitlines() if l.strip()]
+    if edited:
+        print("This checkout has local edits, so update stops here rather than overwrite them:")
+        print("\n".join(f"  {l}" for l in edited))
+        print("Commit or undo them (git stash), then run ./axol update again.")
+        return 1
+    if git("fetch", "--quiet").returncode != 0:
+        print("Couldn't reach the repository (git fetch failed). Check the network.")
+        return 1
+    old = git("rev-parse", "HEAD").stdout.strip()
+    new = git("rev-parse", "@{u}").stdout.strip()
+    if not new:
+        print("This branch doesn't follow a remote branch, so there's nothing to update from.")
+        return 1
+    if old == new:
+        print("Already up to date.")
+        return 0
+    if git("merge", "--ff-only", "--quiet", "@{u}").returncode != 0:
+        print("The local branch has commits the remote doesn't, so it can't simply move forward.")
+        print("Sort it out with git (git status, git log), then run ./axol update again.")
+        return 1
+    print("New since last time:")
+    print(git("log", "--oneline", f"{old}..{new}").stdout.rstrip())
+    changed = git("diff", "--name-only", old, new).stdout.split()
+    if not needs_rebuild(changed):
+        print("\nOnly docs or tests changed: no rebuild needed.")
+        return 0
+    print("\nRebuilding what changed (your data isn't touched)…")
+    args.build = True
+    return cmd_start(args)
+
+
 def cmd_autostart(args) -> int:
     if args.state == "on":
         exe = shutil.which("podman-compose") or "/usr/bin/podman-compose"
@@ -474,12 +525,13 @@ def main(argv: list[str] | None = None) -> int:
     lg.add_argument("service", nargs="?", choices=["axol-llama", "axol-harness"])
     sub.add_parser("rebuild", help="rebuild the images, then start")
     sub.add_parser("model", help="download the model and check its fingerprint")
+    sub.add_parser("update", help="get the latest code and rebuild only if needed")
     au = sub.add_parser("autostart", help="start Axol when this machine boots")
     au.add_argument("state", choices=["on", "off"])
     args = p.parse_args(argv)
     commands = {"setup": cmd_setup, "doctor": cmd_doctor, "start": cmd_start, "stop": cmd_stop,
                 "status": cmd_status, "logs": cmd_logs, "rebuild": cmd_rebuild, "autostart": cmd_autostart,
-                "model": cmd_model}
+                "model": cmd_model, "update": cmd_update}
     return commands[args.command](args)
 
 

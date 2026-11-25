@@ -162,11 +162,19 @@
 - **Still open, for 1.5:** with Podman's default network, the container reaches the internet (HTTP 200 from example.com). The internal network in 1.5 removes that.
 
 **1.4b: Build the prism fork yourself** (your fastest setup)
-- [ ] `deploy/llama/Containerfile`: a CUDA *devel* stage builds the fork with architecture `120`. A CUDA *runtime* stage gets only the built binaries and libraries it needs, runs as a non-root user, and has a health check on `/health`.
-- [ ] Solve the fork's library path inside the image (today it borrows the official build's CUDA libs).
-- [ ] Image name: `axol-llama`.
-- [ ] **Check:** PQ2_0, all layers on the GPU, 8K context, around 36 tok/s.
-- [ ] Commit.
+- [x] `deploy/llama/Containerfile`: a CUDA *devel* stage builds the fork with architecture `120`. A CUDA *runtime* stage gets only the built binaries and libraries it needs, runs as a non-root user, and has a health check on `/health`.
+- [x] Solve the fork's library path inside the image (today it borrows the official build's CUDA libs).
+- [x] Image name: `axol-llama`.
+- [x] **Check:** PQ2_0, all layers on the GPU, 8K context, around 36 tok/s.
+- [x] Commit.
+
+**1.4b results (2026-11-25):** `deploy/llama/Containerfile`, built in ~6 min, image 2.47 GB.
+- Pinned: CUDA 13.2.1 devel and runtime by digest; source `PrismML-Eng/llama.cpp` tag `prism-b12128-d7b2896`, with the build checking commit `d7b28968…`.
+- One static `llama-server` for `sm_120a`, so no `LD_LIBRARY_PATH`. No curl, so it can't download models. No built-in chat page (`LLAMA_USE_PREBUILT_UI=OFF`): the first build failed because it tried to download that page during the build.
+- Runs as `llama` (10001:10001). Options come from `LLAMA_ARG_*` variables; host and port are set in the image, the rest at run time.
+- PQ2_0, all layers on the GPU, 8K context: **36.6 tok/s**, the same as the local fork (36.6, measured back to back). Answers 17×23 = 391.
+- A first reading of 31.8 tok/s was a measuring fluke (GPU state), not the build. Adding CCCL v3.4.3, as the fork's CI does, made no difference, so it was left out.
+- The health check moved to compose (1.5): Podman's default OCI image format ignores `HEALTHCHECK`.
 
 **Pitfalls:** building for the wrong architecture compiles fine but then runs on the CPU, or crashes. The runtime image needs the matching CUDA libs. Too little VRAM shows up as partial offload, so watch the load log.
 

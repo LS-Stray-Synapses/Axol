@@ -22,32 +22,26 @@ from modules import LocalTools, MCPTools, ModelConfig, Agent
 from modules.sessions import SessionStore
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
+from modules.settings import load_settings
 
+SETTINGS = load_settings()
 
 ROOT = Path(__file__).parent
-WORKSPACE = ROOT / "workspace"
-MEMORY_FILE = ROOT / "memory.md"
-MCP_CONFIG = ROOT / "mcp_server.json"
+WORKSPACE = SETTINGS.workspace_dir
+MEMORY_FILE = SETTINGS.data_dir / "memory.md"
+MCP_CONFIG = SETTINGS.mcp_config
 PLUGINS_DIR = ROOT / "plugins"
 DIST_DIR = ROOT / "web" / "dist"
-SESSIONS = SessionStore(ROOT / "sessions")  # one model history per conversation
+SESSIONS = SessionStore(SETTINGS.data_dir / "sessions")
+
+WORKSPACE.mkdir(exist_ok=True, parents=True)
 
 MODELS: dict[str, ModelConfig] = {
-    "bonsai-2:27b": ModelConfig(
-        host="http://localhost:8080/v1",
-        model="bonsai-2:27b"
-    ),
-    "qwen3.5:4b": ModelConfig(
-       host="http://localhost:11434/v1",
-        api_key="ollama",
-        model="qwen3.5:4b"
-    ),
-    "qwen3.5:2b": ModelConfig(
-        host="http://localhost:11434/v1",
-        api_key="ollama",
-        model="qwen3.5:2b"
-    )
+    "bonsai-2:27b": ModelConfig(host=SETTINGS.llama_url, model="bonsai-2:27b"),
 }
+if SETTINGS.ollama_url:
+    MODELS["qwen3.5:4b"] = ModelConfig(host=SETTINGS.ollama_url, api_key="ollama", model="qwen3.5:4b")
+    MODELS["qwen3.5:2b"] = ModelConfig(host=SETTINGS.ollama_url, api_key="ollama", model="qwen3.5:2b")
 
 SYSTEM_PROMPT = """You are a helpful personal assistant running inside a \
 custom harness named Axol. Be concise.

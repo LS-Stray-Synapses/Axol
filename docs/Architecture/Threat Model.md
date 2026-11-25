@@ -21,7 +21,7 @@ tags: [architecture, security]
 |---|---|---|---|
 | 1 | **A web page with hidden instructions** (prompt injection) | The agent has no internet tool at all: `fetch` is off, and neither container can reach the internet | When web access returns, the split internet / files jobs, and memory that needs approval → 3 |
 | 2 | **A website you have open drives the agent** through `ws://localhost` | `Origin` allow-list on `/ws` (HTTP 403 for others) | — |
-| 3 | **A confused or looping model** | Container limits on memory, CPU and processes; read-only root filesystems | A watchdog, per-job limits, and undo → 3, 5 |
+| 3 | **A confused or looping model** | Container limits on memory, CPU and processes; a read-only root filesystem for the harness, non-root users in both | A watchdog, per-job limits, and undo → 3, 5 |
 | 4 | **The agent escapes the workspace** (`../` in a filename) | The harness container only sees `/data` and `/workspace`, so the rest of the machine is out of reach | Path confinement in the file tools (gate before a second user) → 2 |
 | 5 | **A container breaks out** | Rootless Podman: an escape lands as an unprivileged user. Non-root users, no capabilities, `no-new-privileges`. The user isn't in `docker` or `lxd` | — |
 | 6 | **Someone else on the network** | The port is published on `127.0.0.1` only. The model has no published port | Logins before opening it to the VPN → 2 |

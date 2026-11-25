@@ -17,7 +17,7 @@ flowchart LR
 
     subgraph NET["axol-internal network · no internet, no LAN"]
         H["axol-harness<br/>agent + web UI<br/>user 10001 · read-only<br/>1 GB · 2 CPUs"]
-        L["axol-llama<br/>llama.cpp (PrismML fork)<br/>user 10001 · read-only<br/>GPU 0 · 12 GB"]
+        L["axol-llama<br/>llama.cpp (PrismML fork)<br/>user 10001 · no capabilities<br/>GPU 0 · 12 GB"]
     end
 
     H -- "http://axol-llama:8080" --> L
@@ -137,10 +137,14 @@ Containers are disposable, so nothing important lives inside them:
 ### 8. Hardening: what a broken or hijacked container can still do
 | Setting (both containers) | Effect |
 |---|---|
-| `read_only: true` + `tmpfs: /tmp (64 MB)` | it can't change its own programs. It writes only to `/tmp` and its mounted folders |
+| `read_only: true` (harness only, see below) + `tmpfs: /tmp (64 MB)` | it can't change its own programs. It writes only to `/tmp` and its mounted folders |
 | `cap_drop: [ALL]` | no special kernel powers (`CapEff: 0000000000000000`) |
 | `security_opt: [no-new-privileges]` | nothing inside can gain more rights later (`NoNewPrivs: 1`) |
 | `mem_limit` (1 GB / 12 GB), `cpus: 2` (harness), `pids_limit` (128 / 256) | a runaway loop or fork bomb can't freeze the laptop |
+
+**Why the model container isn't read-only.** The GPU driver lives on the host, and the NVIDIA Container Toolkit's CDI hooks bring it in at start: they mount the driver's libraries (`libcuda.so.595.99.02`), then write the short-name links (`libcuda.so.1`, hook `create-symlinks`) and the library cache (`update-ldcache`) into the container's root filesystem. From toolkit 1.20 those writes fail on a read-only root, so the container never starts (`error executing hook nvidia-cdi-hook`). Disabling the two hooks isn't an option: `llama-server` then can't find `libcuda.so.1`.
+
+What that costs is small. The server runs as user 10001, which owns nothing in the image, so it still can't change its own programs (`touch /usr/local/bin/llama-server` → *Permission denied*). The only places it can write are `/tmp` (the 64 MB tmpfs), `/var/tmp` and `/run/lock`. It still has no capabilities, `no-new-privileges` and no internet.
 
 ### 9. Only Axol's own page may open the WebSocket
 Browsers let any website open a WebSocket to `localhost`, so a page you had open could have driven the agent. The harness checks the `Origin` header against `AXOL_ALLOWED_ORIGINS` and refuses everything else with HTTP 403 ([`modules/origins.py`](../../modules/origins.py)). Containers alone don't fix this, because the browser runs on the same machine.
@@ -163,7 +167,7 @@ The fork is compiled as one static binary, for this GPU only (`sm_120a`), **with
 | Harness sees the host's files | only `/data` and `/workspace`. `/home` is empty |
 | Port from another device (`192.168.x.x:8000`) | refused. Works on `127.0.0.1` only |
 | Secrets or data inside the images | 0 files |
-| Users / root filesystem / capabilities | 10001 / read-only / none, `NoNewPrivs: 1` |
+| Users / root filesystem / capabilities | 10001 / read-only (harness; the model container: see §8) / none, `NoNewPrivs: 1` |
 | A real chat, then `down` + `up` | memory and chats survive; asked again, Axol remembers |
 | Files on the host | owned by `lenos` |
 | Speed in the hardened container | **37.4 tok/s** (bare metal: 36.6) |
@@ -188,7 +192,7 @@ The fork is compiled as one static binary, for this GPU only (`sm_120a`), **with
 
 - **Logins.** Anyone who can reach `127.0.0.1:8000` on this machine is "the user". That's project 2, and it's required before the port is opened to the VPN.
 - **Job sandboxes.** The agent's file tools still run inside the harness, and `../` in a filename isn't blocked yet (project 2 gate, project 3).
-- **Disk quotas** for `/data` and `/workspace` (project 2/3). The root filesystems are read-only, so a container can only fill its mounted folders and its 64 MB `/tmp`.
+- **Disk quotas** for `/data` and `/workspace` (project 2/3). The harness's root filesystem is read-only, so it can only fill its mounted folders and its 64 MB `/tmp`. The model container can also write to `/var/tmp` and `/run/lock` (§8).
 - **Starting without a terminal on a desktop.** `./axol autostart on` covers servers. The desktop app (project 7) will add an icon and a loading screen on top of `./axol`.
 
 Back to [Overview](Overview.md)

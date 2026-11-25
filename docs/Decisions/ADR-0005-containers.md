@@ -25,7 +25,7 @@ Axol ran as three processes under the user's own account: the agent and its file
   - `axol-llama`: the PrismML fork `prism-b12128-d7b2896`, built static for `sm_120a` on CUDA 13.2.1, with no HTTPS client and no bundled chat page.
 - **Network:** one `internal: true` network. Only the harness port is published, on `127.0.0.1`. Neither container can reach the internet, so the agent has no `fetch` until sandboxes exist.
 - **Data:** on the host, outside the images: `~/Axol-workspace` (user files), `~/.local/share/axol` (chats, memory), `~/Models` (read-only). The harness is mapped with `keep-id:uid=10001,gid=10001`.
-- **Hardening:** read-only root filesystems, a 64 MB tmpfs `/tmp`, all capabilities dropped, `no-new-privileges`, memory, CPU and process limits.
+- **Hardening:** a read-only root filesystem for the harness, a 64 MB tmpfs `/tmp`, all capabilities dropped, `no-new-privileges`, memory, CPU and process limits. The model container's root filesystem is writable (amended 2026-11-25): NVIDIA Container Toolkit 1.20's CDI hooks write the driver's library links into it and fail on a read-only one. It runs as user 10001, which can't write to the root-owned programs. Details: [Containers](../Architecture/Containers.md) §8.
 - **Readiness:** liveness `/health` for the health checks; a `model_status` event for the UI.
 - **Storage:** Podman's `graphroot` is pinned in `~/.config/containers/storage.conf`, because snap-packaged editors otherwise move it.
 - **Per machine, not per person:** `./axol setup` writes `.env` (paths, port, GPU, detected CUDA architecture, context size), and `compose.yaml` refuses to run without it. `./axol autostart on` adds a systemd user service plus lingering for servers.

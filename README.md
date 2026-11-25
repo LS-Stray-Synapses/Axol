@@ -93,21 +93,22 @@ python3 -m venv .venv
 cd web && npm ci && cd ..
 ```
 
-**Download Bonsai** (PQ2_0 needs the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp); Q2_0 also runs on stock llama.cpp)
-```bash
-hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf --local-dir ~/Models/Bonsai-27B
-```
+**The model:** `./axol model` downloads Bonsai 2 27B PQ2_0 (which needs the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp)) to `~/Models/Bonsai-27B` and checks its fingerprint. The containers and the dev setup both use it.
 
-### Run it in containers (recommended)
+### Install and run it (containers, recommended)
 
-Two rootless Podman containers, the model and the harness + UI, with no internet access and your data kept outside them. Everything goes through `./axol`. How it works and why: [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
+Two rootless Podman containers, the model and the harness + UI, with no internet access and your data kept outside them. You need Ubuntu (or similar) with an NVIDIA GPU and its driver. Everything else, `./axol setup` checks for you, and it prints the exact command for anything missing.
 
 ```bash
-./axol setup        # once: checks this machine, asks a few questions, writes .env
-./axol start        # → http://127.0.0.1:8000   (first time: builds the images)
-./axol status       # / logs / stop / rebuild / doctor
-./axol autostart on # optional, for a server: start when the machine boots
+sudo apt install podman podman-compose git
+git clone https://github.com/LS-Stray-Synapses/Axol.git && cd Axol
+./axol setup        # checks the machine, asks a few questions (Enter = default),
+                    # writes .env, offers to download the model (7.2 GB, checked)
+./axol start        # → http://127.0.0.1:8000   (first time: builds the images, ~10 min)
+./axol autostart on # optional, for a server: start Axol whenever it boots
 ```
+
+Day to day: `./axol status`, `logs`, `stop`, `rebuild` (after changing code), `doctor`. How it works and why: [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
 
 ### Run it for development (three terminals, from the repo root)
 

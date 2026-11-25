@@ -38,10 +38,9 @@ flowchart LR
 Everything goes through one command, **`./axol`**, from the repo root. It runs `podman-compose` for you, and it needs only Python 3, which Ubuntu already has.
 
 **Once per machine:**
-1. **Install** rootless Podman and podman-compose (`sudo apt install podman podman-compose`), the NVIDIA driver, and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), from NVIDIA's apt repository.
-2. **Get the model:** `hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf --local-dir ~/Models/Bonsai-27B`
-3. **Run `./axol setup`.** It asks a few questions, each with a sensible default (press Enter to accept), and writes **`.env`** for this machine: folders, port, GPU, context size. It **detects the GPU's architecture** by itself. It creates the folders, pins Podman's storage when an editor installed as a snap would otherwise move it, then checks the whole machine and says exactly what to fix.
-4. **Optional, for a server: `./axol autostart on`.** Axol starts whenever the machine boots, even before anyone logs in.
+1. **Install** git, rootless Podman and podman-compose (`sudo apt install podman podman-compose git`), and the NVIDIA driver. Then clone the repo.
+2. **Run `./axol setup`.** It asks a few questions, each with a sensible default (press Enter to accept), and writes **`.env`** for this machine: folders, port, GPU, context size. It **detects the GPU's architecture** by itself. It creates the folders, pins Podman's storage when an editor installed as a snap would otherwise move it, and **offers to download the model** (`./axol model`: 7.2 GB, resumable, checked against a fingerprint pinned in the repo). Then it checks the whole machine and prints the exact command for anything missing, including the NVIDIA Container Toolkit. Run it again after fixing something.
+3. **Optional, for a server: `./axol autostart on`.** Axol starts whenever the machine boots, even before anyone logs in.
 
 **Every day:**
 
@@ -53,10 +52,21 @@ Everything goes through one command, **`./axol`**, from the repo root. It runs `
 | `./axol stop` | stop and remove the containers. Your data stays |
 | `./axol rebuild` | after changing code. The first model build downloads ~5.6 GB and compiles for ~6 min |
 | `./axol doctor` | check the machine again, e.g. after a driver update |
+| `./axol model` | download the model, or check the fingerprint of the one you have |
 
 After `start`, the UI says *"Waking the model…"* for a few seconds. Both containers are usually healthy in about 15 seconds.
 
 **Developing** stays as before: llama.cpp, `uvicorn --reload` and `npm run dev` in three terminals (see the README). Containers are how Axol *runs*, not how you edit it.
+
+### Using it from another machine, until logins exist
+
+Axol has no logins yet (project 2), so it only listens on the machine it runs on (`127.0.0.1`). **Don't publish it further.** To use a server from your laptop, carry the port through SSH, which only lets in people who can log in to the server:
+
+```bash
+ssh -N -L 8000:127.0.0.1:8000 you@server     # leave it running, then open http://127.0.0.1:8000
+```
+
+The browser still sees `127.0.0.1:8000`, so the WebSocket `Origin` check is satisfied. Make the server's SSH key-only (`ssh-copy-id`, then `PasswordAuthentication no`), because for now it's the door to the agent.
 
 ### What `./axol setup` writes (`.env`)
 

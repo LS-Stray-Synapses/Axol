@@ -11,18 +11,21 @@ so it works before anything else is installed.
     ./axol status       what's running
     ./axol logs [name]  follow the logs (Ctrl+C stops watching, not Axol)
     ./axol rebuild      rebuild the images after changing code, then start
+    ./axol model        download the model (resumable) and check its fingerprint
     ./axol autostart on|off   start Axol when this machine boots
 
 Why each piece exists: docs/Architecture/Containers.md
 """
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +39,27 @@ UNIT_FILE = HOME / ".config" / "systemd" / "user" / "axol.service"
 MIN_DRIVER_CUDA = (13, 2)
 # Building the model image the first time needs this much free space (GB).
 MIN_FREE_GB = 15
+
+# Models ./axol can download, pinned by SHA-256 like everything else from outside.
+# (Values from Hugging Face's file listing; checked against a local download.)
+KNOWN_MODELS = {
+    "Ternary-Bonsai-2-27B-PQ2_0.gguf": (
+        "https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-PQ2_0.gguf",
+        "3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1",
+        7206168928,
+    ),
+}
+
+# The NVIDIA Container Toolkit, from NVIDIA's signed apt repository (their install guide:
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+TOOLKIT_INSTALL = (
+    "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | "
+    "sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg && "
+    "curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | "
+    "sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | "
+    "sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list && "
+    "sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit"
+)
 
 # Every setting in .env: (name, question, default). The defaults suit most machines.
 SETTINGS = [
@@ -130,6 +154,37 @@ def unit_text(repo: Path, compose: str) -> str:
     )
 
 
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def download(url: str, dest: Path, sha256: str, size: int | None = None, progress=None) -> None:
+    """Download to dest.part, resuming a partial file, then check the fingerprint and
+    rename. A file that doesn't match is deleted, never kept."""
+    part = dest.with_name(dest.name + ".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    have = part.stat().st_size if part.exists() else 0
+    request = urllib.request.Request(url, headers={"Range": f"bytes={have}-"} if have else {})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        if have and response.status != 206:  # the server ignored the resume: start over
+            have = 0
+        with part.open("ab" if have else "wb") as f:
+            while block := response.read(1 << 20):
+                f.write(block)
+                have += len(block)
+                if progress:
+                    progress(have, size)
+    actual = sha256_of(part)
+    if actual != sha256:
+        part.unlink()
+        raise ValueError(f"fingerprint mismatch for {dest.name}: got {actual}, expected {sha256}")
+    part.rename(dest)
+
+
 # --------------------------------------------------------------------------- checks
 
 @dataclass
@@ -197,9 +252,7 @@ def checks(env: dict[str, str]) -> list[Check]:
         out.append(Check(f"GPU visible to containers ({gpu})", gpu in cdi, "",
                          "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"))
     else:
-        out.append(Check("NVIDIA Container Toolkit", False, "nvidia-ctk not installed",
-                         "install it from NVIDIA's apt repository: "
-                         "https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html"))
+        out.append(Check("NVIDIA Container Toolkit", False, "nvidia-ctk not installed", TOOLKIT_INSTALL))
 
     # Settings, folders, model
     missing = [name for name, _, _ in SETTINGS if not env.get(name)]
@@ -211,8 +264,8 @@ def checks(env: dict[str, str]) -> list[Check]:
     if env.get("AXOL_MODELS_PATH") and env.get("AXOL_MODEL_FILE"):
         model = Path(env["AXOL_MODELS_PATH"]) / env["AXOL_MODEL_FILE"]
         out.append(Check("Model file", model.is_file(), str(model),
-                         "hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf "
-                         f"--local-dir {env['AXOL_MODELS_PATH']}"))
+                         "./axol model" if env["AXOL_MODEL_FILE"] in KNOWN_MODELS
+                         else f"put {env['AXOL_MODEL_FILE']} in {env['AXOL_MODELS_PATH']}"))
 
     # Disk space for the first build
     free = shutil.disk_usage(HOME).free / 1e9
@@ -274,8 +327,52 @@ def cmd_setup(args) -> int:
             STORAGE_CONF.write_text(storage_conf_text(HOME, os.getuid()), encoding="utf-8")
             print(f"Wrote {STORAGE_CONF}")
 
+    model = Path(values["AXOL_MODELS_PATH"]) / values["AXOL_MODEL_FILE"]
+    if not model.is_file() and values["AXOL_MODEL_FILE"] in KNOWN_MODELS:
+        size_gb = KNOWN_MODELS[values["AXOL_MODEL_FILE"]][2] / 1e9
+        answer = "n" if args.yes else input(f"\nThe model isn't here yet. Download it now ({size_gb:.1f} GB)? [Y/n] ").strip().lower()
+        if answer in ("", "y", "yes"):
+            cmd_model(args)
+        else:
+            print("Later: ./axol model")
+
     print("\nChecking this machine:")
     return 0 if print_checks(checks(values)) else 1
+
+
+def cmd_model(_args) -> int:
+    env = read_env(ENV_FILE)
+    if not env.get("AXOL_MODELS_PATH") or not env.get("AXOL_MODEL_FILE"):
+        print("No settings yet: run ./axol setup first.")
+        return 1
+    name = env["AXOL_MODEL_FILE"]
+    dest = Path(env["AXOL_MODELS_PATH"]) / name
+    if name not in KNOWN_MODELS:
+        print(f"{name} isn't one ./axol knows how to download. Put it in {dest.parent} yourself.")
+        return 1
+    url, sha256, size = KNOWN_MODELS[name]
+    if dest.is_file():
+        print(f"Checking the fingerprint of {dest} …")
+        ok = sha256_of(dest) == sha256
+        print("OK: it matches." if ok else "MISMATCH: this isn't the expected file. Delete it and run ./axol model again.")
+        return 0 if ok else 1
+
+    def progress(have: int, total: int | None) -> None:
+        pct = f"{have / total:5.1%}" if total else ""
+        print(f"\r  {have / 1e9:5.2f} GB {pct}", end="", flush=True)
+
+    print(f"Downloading {name} ({size / 1e9:.1f} GB) to {dest.parent}")
+    print("  (Ctrl+C is safe: running ./axol model again carries on where it stopped)")
+    try:
+        download(url, dest, sha256, size, progress)
+    except KeyboardInterrupt:
+        print("\nPaused. Run ./axol model to continue.")
+        return 1
+    except (ValueError, OSError) as e:
+        print(f"\nFailed: {e}")
+        return 1
+    print("\nDownloaded, and the fingerprint matches.")
+    return 0
 
 
 def cmd_doctor(_args) -> int:
@@ -376,11 +473,13 @@ def main(argv: list[str] | None = None) -> int:
     lg = sub.add_parser("logs", help="follow the logs")
     lg.add_argument("service", nargs="?", choices=["axol-llama", "axol-harness"])
     sub.add_parser("rebuild", help="rebuild the images, then start")
+    sub.add_parser("model", help="download the model and check its fingerprint")
     au = sub.add_parser("autostart", help="start Axol when this machine boots")
     au.add_argument("state", choices=["on", "off"])
     args = p.parse_args(argv)
     commands = {"setup": cmd_setup, "doctor": cmd_doctor, "start": cmd_start, "stop": cmd_stop,
-                "status": cmd_status, "logs": cmd_logs, "rebuild": cmd_rebuild, "autostart": cmd_autostart}
+                "status": cmd_status, "logs": cmd_logs, "rebuild": cmd_rebuild, "autostart": cmd_autostart,
+                "model": cmd_model}
     return commands[args.command](args)
 
 

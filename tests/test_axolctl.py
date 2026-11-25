@@ -77,3 +77,74 @@ def test_every_setting_used_by_compose_is_asked_for():
     used = set(__import__("re").findall(r"\$\{(AXOL_[A-Z_]+)", compose))
 
     assert used <= {name for name, _, _ in axolctl.SETTINGS}
+
+
+# --------------------------------------------------------------------------- the model download
+
+import hashlib
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+CONTENT = bytes(range(256)) * 4096  # 1 MiB
+CONTENT_SHA = hashlib.sha256(CONTENT).hexdigest()
+
+
+@pytest.fixture
+def file_server():
+    """A tiny local server that, like Hugging Face, honours Range for resuming."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            start = 0
+            if rng := self.headers.get("Range"):
+                start = int(rng.removeprefix("bytes=").split("-")[0])
+                self.send_response(206)
+            else:
+                self.send_response(200)
+            body = CONTENT[start:]
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}/model.gguf"
+    server.shutdown()
+
+
+def test_download_checks_the_fingerprint(tmp_path, file_server):
+    dest = tmp_path / "model.gguf"
+
+    axolctl.download(file_server, dest, CONTENT_SHA, len(CONTENT))
+
+    assert dest.read_bytes() == CONTENT
+    assert not (tmp_path / "model.gguf.part").exists()
+
+
+def test_download_resumes_a_partial_file(tmp_path, file_server):
+    dest = tmp_path / "model.gguf"
+    (tmp_path / "model.gguf.part").write_bytes(CONTENT[:1000])
+
+    axolctl.download(file_server, dest, CONTENT_SHA, len(CONTENT))
+
+    assert dest.read_bytes() == CONTENT
+
+
+def test_download_with_wrong_fingerprint_keeps_nothing(tmp_path, file_server):
+    dest = tmp_path / "model.gguf"
+
+    with pytest.raises(ValueError, match="fingerprint mismatch"):
+        axolctl.download(file_server, dest, "0" * 64, len(CONTENT))
+
+    assert not dest.exists()
+    assert not (tmp_path / "model.gguf.part").exists()
+
+
+def test_known_model_matches_this_setup():
+    url, sha, size = axolctl.KNOWN_MODELS["Ternary-Bonsai-2-27B-PQ2_0.gguf"]
+
+    assert url.startswith("https://huggingface.co/prism-ml/")
+    assert len(sha) == 64 and size > 7e9

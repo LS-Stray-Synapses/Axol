@@ -223,7 +223,7 @@ How a change goes live:
 | **Core** | kernel, login, permission checks, limits, logs, watchdog, launcher client | an admin, by installing a new core version | in the core |
 | **Adjustable: settings** | prompts, loop-strategy settings, model per task, compositions | Axol, through §9 | in the core (it's data, not code) |
 | **Adjustable: code** | a loop, tool or context strategy Axol wrote | Axol, through §9 | **out of the core**, in a sandboxed plugin host talking over a narrow message API |
-| **UI** | screens, tabs | Axol-made ones through §9 | an isolated browser frame |
+| **UI** | screens, tabs | built-in ones: only by a new core image. Axol-made ones: through §9 | built-in: the main page, from the image (read-only). Axol-made: **stored as data** (`/data/plugins/<user>/`, versioned, separate from the image's `plugins/`), **served from a separate address**, run in an isolated browser frame |
 
 - **Core plugins can't be unloaded, replaced or patched at runtime.** In the composition (profiles → bundles → patches), core rows are locked. A patch from the adjustable layer that targets one is rejected and logged.
 - **The permission check runs innermost**, right before a tool executes. Adjustable plugins may wrap a step (rewrite a prompt, retry, compact context), but they never run between the check and the execution.

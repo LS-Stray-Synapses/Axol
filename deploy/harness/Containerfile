@@ -1,0 +1,12 @@
+# Axol harness image: the Python harness plus the built web UI.
+# Build from the repo root:  podman build -f deploy/harness/Containerfile -t axol-harness .
+# What gets in is decided by .containerignore (deny by default).
+
+# ---- Stage 1: build the UI (thrown away after) ----
+FROM docker.io/library/node:22-slim AS ui
+WORKDIR /web
+# Package lists first: the slow install below is cached until they change.
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build

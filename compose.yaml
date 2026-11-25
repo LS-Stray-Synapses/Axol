@@ -41,7 +41,10 @@ services:
       start_period: 120s
     restart: unless-stopped
     # Hardening (lesson 1.6)
-    read_only: true
+    # No read_only here: NVIDIA Container Toolkit 1.20's CDI hooks (update-ldcache,
+    # create-symlinks) write the driver's library links into the container's root
+    # filesystem, and fail on a read-only one. The server still runs as user 10001,
+    # which can't write to the root-owned programs, with no capabilities.
     tmpfs: [/tmp:size=64m]
     cap_drop: [ALL]
     security_opt: [no-new-privileges]

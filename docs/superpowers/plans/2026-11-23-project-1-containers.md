@@ -94,6 +94,7 @@
 | `AXOL_DATA_DIR` | repo root (so `sessions/` and `memory.md` stay where they are) | `/data` |
 | `AXOL_WORKSPACE_DIR` | repo `workspace/` | `/workspace` |
 | `AXOL_MCP_CONFIG` | repo `mcp_server.json` | `/app/deploy/harness/mcp_server.json` |
+| `AXOL_ALLOWED_ORIGINS` | the UI's local addresses (lesson 1.2b) | `http://127.0.0.1:8000` |
 
 `modules/settings.py` holds one function, `load_settings() -> Settings`, where `Settings` is a small frozen dataclass or pydantic model with `llama_url: str`, `ollama_url: str | None`, `data_dir: Path`, `workspace_dir: Path`, `mcp_config: Path`. `mock_server.py` builds `WORKSPACE`, `MEMORY_FILE`, `SESSIONS`, `MCP_CONFIG` and `MODELS` from it. `PLUGINS_DIR` and `DIST_DIR` stay relative to the code, because they're part of the app, not data.
 
@@ -106,6 +107,18 @@
 - [x] Wire `mock_server.py` to use it. When `ollama_url` is `None`, the Qwen entries aren't added to `MODELS`.
 - [x] **Check:** the normal three-terminal setup still works end to end (send a message, get an answer, memory still loads).
 - [x] Commit, and tell Stefanos.
+
+### Lesson 1.2b: Only Axol's own page may connect (added 2026-11-25)
+
+**Why:** browsers don't stop a page on one site from opening a WebSocket to another. Any website you had open could connect to `ws://localhost:8000/ws` and drive the agent: read and write the workspace, read memory. This is cross-site WebSocket hijacking. Containers don't fix it, because the harness is still published on `127.0.0.1`.
+
+**Decisions locked:** `AXOL_ALLOWED_ORIGINS`, comma-separated, defaults to the UI's four local addresses (`localhost`/`127.0.0.1` on `:5173` and `:8000`). `modules/origins.py`: `origin_allowed(origin: str | None, allowed: tuple[str, ...]) -> bool`. A missing Origin is allowed (not a browser; logins in project 2 cover local programs). The literal `"null"` is refused. `/ws` closes with code 1008 before accepting.
+
+- [x] Tests first: `tests/test_origins.py` (own UI, other site, other port, `null`, missing) and `tests/test_ws_origin.py` (the real endpoint, with throwaway folders and no MCP servers). `httpx` pinned in `requirements-dev.txt` for the test client.
+- [x] Settings gains `allowed_origins`, and the settings tests cover the default list and comma parsing.
+- [x] Broke the check on purpose: 4 tests failed. Restored: 12 passed.
+- [x] Live check against the running harness, both directly and through Vite: own UI accepted, other site refused with HTTP 403.
+- [x] In compose (1.5): set `AXOL_ALLOWED_ORIGINS` to the address the harness is published on.
 
 ### Lesson 1.3: The harness image
 

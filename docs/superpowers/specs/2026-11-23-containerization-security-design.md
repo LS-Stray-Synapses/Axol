@@ -62,6 +62,7 @@ We want:
 | No queue. Each connection's turn calls llama.cpp straight away. | `mock_server.py`, `modules/agent.py` | Two users fight over one 8 GB GPU with no feedback. |
 | Model endpoints are hardcoded to `localhost:8080` / `:11434`. | `mock_server.py` (`MODELS`) | Inside a container, `localhost` means the container itself. Endpoints have to come from configuration. |
 | FastAPI already serves `web/dist` when it exists. | `mock_server.py` | The UI doesn't need its own container. Build it into the harness image. |
+| `/ws` accepted connections from any web page (cross-site WebSocket hijacking). **Fixed 2026-11-25**: Origin allow-list, lesson 1.2b. | `mock_server.py` | Any website you had open could drive the agent. |
 | UI plugins are JS files the browser `import()`s into the main page. | `plugins/`, `web/src/plugins.ts` | A plugin the agent wrote itself would run with the user's full session. It needs a sandbox before the agent may generate UI. |
 | Best local setup: prism fork + PQ2_0, all layers on GPU, 8K context, 36 tok/s. The fork loads CUDA libs from the official build. | `~/llama/RESULTS.md` | Building the llama.cpp image is the trickiest container step. |
 

@@ -23,6 +23,7 @@ from modules.sessions import SessionStore
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from modules.settings import load_settings
+from modules.origins import origin_allowed
 
 SETTINGS = load_settings()
 
@@ -453,6 +454,12 @@ async def operation(t: Turn, name: str, args: dict):
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
+    # Refuse web pages from other sites before accepting (modules/origins.py).
+    origin = ws.headers.get("origin")
+    if not origin_allowed(origin, SETTINGS.allowed_origins):
+        print(f"  [ws] refused connection from origin {origin!r}")
+        await ws.close(code=1008)  # policy violation
+        return
     await ws.accept()
 
     await ws.send_json({

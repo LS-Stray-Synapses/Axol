@@ -108,7 +108,7 @@ git clone https://github.com/LS-Stray-Synapses/Axol.git && cd Axol
 ./axol autostart on # optional, for a server: start Axol whenever it boots
 ```
 
-Day to day: `./axol status`, `logs`, `stop`, `rebuild` (after changing code), `doctor`. How it works and why: [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
+Day to day: `./axol status`, `logs`, `stop`, `doctor`. To get new versions: `./axol update` (pulls the code and rebuilds only what changed; your data isn't touched). How it works and why: [docs/Architecture/Containers.md](docs/Architecture/Containers.md).
 
 ### Run it for development (three terminals, from the repo root)
 

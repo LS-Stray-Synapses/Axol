@@ -50,7 +50,8 @@ Everything goes through one command, **`./axol`**, from the repo root. It runs `
 | `./axol status` | what's running, and whether it's `(healthy)` |
 | `./axol logs` (or `./axol logs axol-harness`) | follow the logs. **Ctrl+C** stops watching, not Axol |
 | `./axol stop` | stop and remove the containers. Your data stays |
-| `./axol rebuild` | after changing code. The first model build downloads ~5.6 GB and compiles for ~6 min |
+| `./axol update` | get the latest code from GitHub and rebuild only if an image changed. It stops if the checkout has local edits, so nothing is overwritten |
+| `./axol rebuild` | after changing code yourself. The first model build downloads ~5.6 GB and compiles for ~6 min |
 | `./axol doctor` | check the machine again, e.g. after a driver update |
 | `./axol model` | download the model, or check the fingerprint of the one you have |
 
